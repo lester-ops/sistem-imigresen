@@ -65,12 +65,16 @@ export default function BakiCuti() {
           0
         );
 
-        const kelayakanAsas = rekod.pegawai?.kelayakan_cuti_asas || 0;
+        // FIX: Beritahu TypeScript untuk ekstrak objek pertama jika ia adalah array
+        const dataPegawai: any = Array.isArray(rekod.pegawai) ? rekod.pegawai[0] : rekod.pegawai;
+
+        const kelayakanAsas = dataPegawai?.kelayakan_cuti_asas || 0;
         const bawaHadapan = rekod.baki_bawa_hadapan || 0;
         const bakiSemasa = (kelayakanAsas + bawaHadapan) - jumlahCutiDiambil;
 
         return {
           ...rekod,
+          pegawai: dataPegawai, // Kemas kini supaya kod di bawah tidak error
           jumlah_diambil: jumlahCutiDiambil,
           baki_semasa: bakiSemasa,
         };
