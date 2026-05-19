@@ -65,8 +65,10 @@ export default function BakiCuti() {
           0
         );
 
-        // FIX: Beritahu TypeScript untuk ekstrak objek pertama jika ia adalah array
-        const dataPegawai: any = Array.isArray(rekod.pegawai) ? rekod.pegawai[0] : rekod.pegawai;
+        // FIX (Bypass TypeScript Error 100%): 
+        // Paksa TypeScript anggap data ini sebagai 'any' dari awal untuk elak ralat Vercel
+        const peg: any = rekod.pegawai;
+        const dataPegawai = Array.isArray(peg) ? peg[0] : peg;
 
         const kelayakanAsas = dataPegawai?.kelayakan_cuti_asas || 0;
         const bawaHadapan = rekod.baki_bawa_hadapan || 0;
@@ -74,7 +76,7 @@ export default function BakiCuti() {
 
         return {
           ...rekod,
-          pegawai: dataPegawai, // Kemas kini supaya kod di bawah tidak error
+          pegawai: dataPegawai, 
           jumlah_diambil: jumlahCutiDiambil,
           baki_semasa: bakiSemasa,
         };
