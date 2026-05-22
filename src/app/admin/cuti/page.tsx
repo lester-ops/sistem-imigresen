@@ -27,13 +27,28 @@ export default function RekodCuti() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
 
-  // --- STATE UNTUK BORANG PUKAL DINAMIK ---
+  // --- STATE UNTUK BORANG PUKAL DINAMIK CUTI ---
   const [bilanganEntry, setBilanganEntry] = useState(1);
   const janaBarisKosong = () => ({
     ic_pegawai: "", kategori_pegawai: "", jenis_cuti: "", klinik: "",
     tarikh_mula: "", tarikh_tamat: "", hari_off: "0", hari_dikira: 0, catatan: "",
   });
   const [entries, setEntries] = useState<any[]>(() => [janaBarisKosong()]);
+
+  // --- STATE UNTUK TAMBAH JAM CUTI GANTIAN (PUKAL) ---
+  const [isGantianModalOpen, setIsGantianModalOpen] = useState(false);
+  const [isSubmittingGantian, setIsSubmittingGantian] = useState(false);
+  const [bilanganGantianEntry, setBilanganGantianEntry] = useState(1);
+  const [gantianBulanTahun, setGantianBulanTahun] = useState({
+    tahun: new Date().getFullYear().toString(),
+    bulan: String(new Date().getMonth() + 1).padStart(2, '0'),
+  });
+
+  const janaBarisGantianKosong = () => ({
+    ic_pegawai: "",
+    jumlah_jam: ""
+  });
+  const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
 
   const dapatkanDataCuti = useCallback(async () => {
     try {
@@ -106,6 +121,112 @@ export default function RekodCuti() {
   };
 
   // =======================================================================
+  // FUNGSI DATA ENTRY: TAMBAH JAM CUTI GANTIAN (PUKAL)
+  // =======================================================================
+  useEffect(() => {
+    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
+    setGantianEntries((prev) => {
+      const salinan = [...prev];
+      if (jumlahBaru > salinan.length) {
+        for (let i = salinan.length; i < jumlahBaru; i++) {
+          salinan.push(janaBarisGantianKosong());
+        }
+      } else {
+        salinan.length = jumlahBaru;
+      }
+      return salinan;
+    });
+  }, [bilanganGantianEntry]);
+
+  const updateGantianEntry = (index: number, field: string, value: any) => {
+    const salinan = [...gantianEntries];
+    salinan[index] = { ...salinan[index], [field]: value };
+    setGantianEntries(salinan);
+  };
+
+  const resetBorangGantian = () => {
+    setBilanganGantianEntry(1);
+    setGantianEntries([janaBarisGantianKosong()]);
+  };
+
+  const handleGantianSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingGantian(true);
+    try {
+      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
+
+      if (validEntries.length === 0) {
+          alert("Sila isi sekurang-kurangnya satu rekod jam gantian dengan lengkap.");
+          setIsSubmittingGantian(false); return;
+      }
+
+      // Semakan: Pastikan IC tidak berulang dalam form (elak konflik masa update DB)
+      const icSet = new Set();
+      for (const item of validEntries) {
+         if (icSet.has(item.ic_pegawai)) {
+            alert("Terdapat pegawai yang dipilih lebih dari sekali dalam senarai borang. Sila satukan jumlah jam pegawai tersebut.");
+            setIsSubmittingGantian(false); return;
+         }
+         icSet.add(item.ic_pegawai);
+      }
+
+      // 1. Dapatkan Baki Sedia Ada dari Database (untuk pegawai-pegawai yang dipilih sahaja)
+      const { data: existingBaki, error: errFetch } = await supabase
+          .from("cuti_baki")
+          .select("id, ic_pegawai, baki_gantian_jam")
+          .eq("tahun", gantianBulanTahun.tahun)
+          .in("ic_pegawai", Array.from(icSet));
+
+      if (errFetch) throw errFetch;
+
+      const existingMap = new Map();
+      existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
+
+      // 2. Loop dan Proses Setiap Rekod
+      for (const item of validEntries) {
+         const jamTambah = parseFloat(item.jumlah_jam);
+         if (isNaN(jamTambah) || jamTambah <= 0) continue;
+
+         const rekodLama = existingMap.get(item.ic_pegawai);
+         let bakiTerkini = jamTambah;
+
+         if (rekodLama) {
+            bakiTerkini += (rekodLama.baki_gantian_jam || 0);
+            await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id);
+         } else {
+            await supabase.from("cuti_baki").insert({
+                ic_pegawai: item.ic_pegawai,
+                tahun: gantianBulanTahun.tahun,
+                baki_bawa_hadapan: 0,
+                baki_gantian_jam: jamTambah
+            });
+         }
+
+         // Simpan log ke cuti_gantian_tambah (kalau ada)
+         try {
+            await supabase.from("cuti_gantian_tambah").insert({
+                ic_pegawai: item.ic_pegawai,
+                tahun: gantianBulanTahun.tahun,
+                bulan: gantianBulanTahun.bulan,
+                jumlah_jam: jamTambah
+            });
+         } catch (ignoredErr) {
+            console.log("Abaikan jika jadual cuti_gantian_tambah tiada");
+         }
+      }
+
+      alert(`Berjaya! ${validEntries.length} rekod jam cuti gantian telah disimpan.`);
+      setIsGantianModalOpen(false);
+      resetBorangGantian();
+      
+    } catch (err: any) {
+        alert("Gagal merekod jam cuti gantian pukal: " + err.message);
+    } finally {
+        setIsSubmittingGantian(false);
+    }
+  };
+
+  // =======================================================================
   // FUNGSI EDIT CUTI (SINGLE ENTRY)
   // =======================================================================
   const bukaModalEdit = (cuti: any) => {
@@ -115,6 +236,9 @@ export default function RekodCuti() {
       nama_pegawai: cuti.pegawai?.nama,
       kategori_pegawai: cuti.kategori_pegawai || "Pejabat",
       jenis_cuti: cuti.jenis_cuti || "",
+      original_jenis_cuti: cuti.jenis_cuti || "", // Rujukan untuk refund jam gantian
+      original_bilangan_hari: cuti.bilangan_hari || 0, // Rujukan untuk refund jam gantian
+      tahun: cuti.tahun,
       klinik: cuti.klinik || "",
       tarikh_mula: cuti.tarikh_mula || "",
       tarikh_tamat: cuti.tarikh_tamat || "",
@@ -125,7 +249,6 @@ export default function RekodCuti() {
     setIsEditModalOpen(true);
   };
 
-  // Pengiraan automatik dalam borang Edit
   useEffect(() => {
     if (editFormData && isEditModalOpen) {
       const hari = kiraBilanganHari(
@@ -174,8 +297,9 @@ export default function RekodCuti() {
            }
         }
 
-        // Update Rekod
         const tahunCuti = new Date(editFormData.tarikh_mula).getFullYear();
+        
+        // 1. KEMAS KINI REKOD CUTI
         const { error } = await supabase.from("cuti_transaksi").update({
           kategori_pegawai: editFormData.kategori_pegawai,
           jenis_cuti: editFormData.jenis_cuti,
@@ -189,6 +313,34 @@ export default function RekodCuti() {
         }).eq("id", editFormData.id);
 
         if (error) throw error;
+
+        // 2. LOGIK PELARASAN JAM CUTI GANTIAN (Jika ada perubahan)
+        let perubahanJamGantian = 0;
+        const isOldGantian = editFormData.original_jenis_cuti === "Cuti Gantian";
+        const isNewGantian = editFormData.jenis_cuti === "Cuti Gantian";
+
+        if (isOldGantian) {
+            // Pulangkan (refund) jam lamanya
+            perubahanJamGantian += (editFormData.original_bilangan_hari * 9);
+        }
+        if (isNewGantian) {
+            // Tolak jam barunya
+            perubahanJamGantian -= (editFormData.bilangan_hari * 9);
+        }
+
+        if (perubahanJamGantian !== 0) {
+            const { data: bakiData } = await supabase.from("cuti_baki")
+                .select("id, baki_gantian_jam")
+                .eq("ic_pegawai", editFormData.ic_pegawai)
+                .eq("tahun", tahunCuti)
+                .single();
+                
+            if (bakiData) {
+                const bakiBaru = (bakiData.baki_gantian_jam || 0) + perubahanJamGantian;
+                await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiBaru }).eq("id", bakiData.id);
+            }
+        }
+
         alert("Rekod cuti berjaya dikemas kini!");
         setIsEditModalOpen(false);
         dapatkanDataCuti();
@@ -200,14 +352,33 @@ export default function RekodCuti() {
     }
   };
 
+  // =======================================================================
   // FUNGSI MEMADAM REKOD CUTI
-  const handlePadam = async (id: string, jenisCuti: string, namaPegawai: string) => {
-    const sahkan = confirm(`Adakah anda pasti untuk memadam rekod cuti ini?\n\nPegawai: ${namaPegawai}\nJenis: ${jenisCuti}`);
+  // =======================================================================
+  const handlePadam = async (cuti: any) => {
+    const sahkan = confirm(`Adakah anda pasti untuk memadam rekod cuti ini?\n\nPegawai: ${cuti.pegawai?.nama}\nJenis: ${cuti.jenis_cuti}`);
     if (!sahkan) return;
     try {
       setLoading(true);
-      const { error } = await supabase.from("cuti_transaksi").delete().eq("id", id);
+      const { error } = await supabase.from("cuti_transaksi").delete().eq("id", cuti.id);
       if (error) throw error;
+
+      // REFUND (TAMBAH SEMULA) JAM JIKA CUTI GANTIAN DIPADAM
+      if (cuti.jenis_cuti === "Cuti Gantian" && cuti.bilangan_hari > 0) {
+         const jamRefund = cuti.bilangan_hari * 9;
+         const { data: bakiData } = await supabase.from("cuti_baki")
+             .select("id, baki_gantian_jam")
+             .eq("ic_pegawai", cuti.ic_pegawai)
+             .eq("tahun", cuti.tahun)
+             .single();
+             
+         if (bakiData) {
+            await supabase.from("cuti_baki")
+                .update({ baki_gantian_jam: (bakiData.baki_gantian_jam || 0) + jamRefund })
+                .eq("id", bakiData.id);
+         }
+      }
+
       alert("Rekod cuti berjaya dipadam!");
       dapatkanDataCuti(); 
     } catch (err: any) {
@@ -242,7 +413,7 @@ export default function RekodCuti() {
   const totalPages = Math.ceil(cutiDitapis.length / itemsPerPage);
 
   // =======================================================================
-  // LOGIK BORANG PUKAL
+  // LOGIK BORANG PUKAL CUTI TRANSAKSI
   // =======================================================================
   useEffect(() => {
     const jumlahBaru = parseInt(bilanganEntry.toString()) || 1;
@@ -341,8 +512,28 @@ export default function RekodCuti() {
         };
       });
 
+      // 1. DAFTAR CUTI KE DALAM TRANSAKSI
       const { error } = await supabase.from("cuti_transaksi").insert(dataUntukDiSimpan);
       if (error) throw error;
+
+      // 2. PEMOTONGAN JAM (1 HARI = 9 JAM) JIKA CUTI GANTIAN
+      for (const item of dataUntukDiSimpan) {
+        if (item.jenis_cuti === "Cuti Gantian" && item.bilangan_hari > 0) {
+            const jamTolak = item.bilangan_hari * 9;
+            const { data: bakiData } = await supabase.from("cuti_baki")
+                .select("id, baki_gantian_jam")
+                .eq("ic_pegawai", item.ic_pegawai)
+                .eq("tahun", item.tahun)
+                .single();
+            
+            if (bakiData) {
+                const bakiTerkini = (bakiData.baki_gantian_jam || 0) - jamTolak;
+                await supabase.from("cuti_baki")
+                    .update({ baki_gantian_jam: bakiTerkini })
+                    .eq("id", bakiData.id);
+            }
+        }
+      }
 
       alert(`Berjaya! ${dataUntukDiSimpan.length} rekod permohonan cuti telah disimpan.`);
       setIsModalOpen(false);
@@ -362,12 +553,20 @@ export default function RekodCuti() {
             <h1 className="text-3xl font-bold text-gray-800">Senarai Rekod Cuti</h1>
             <p className="text-gray-500 text-sm mt-1">Sistem Pengurusan & Pengiraan Cuti Berjadual</p>
           </div>
-          <button 
-            onClick={() => { resetBorang(); setIsModalOpen(true); }}
-            className="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
-          >
-            <span className="mr-2">+</span> Permohonan Cuti (Batch)
-          </button>
+          <div className="flex space-x-3">
+            <button 
+              onClick={() => { resetBorangGantian(); setIsGantianModalOpen(true); }}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
+            >
+              <span className="mr-2">⏱️</span> Tambah Jam Gantian (Batch)
+            </button>
+            <button 
+              onClick={() => { resetBorang(); setIsModalOpen(true); }}
+              className="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
+            >
+              <span className="mr-2">+</span> Permohonan Cuti (Batch)
+            </button>
+          </div>
         </div>
 
         {errorMsg && (
@@ -477,7 +676,7 @@ export default function RekodCuti() {
                             ✏️
                           </button>
                           <button 
-                            onClick={() => handlePadam(cuti.id, cuti.jenis_cuti, cuti.pegawai?.nama)}
+                            onClick={() => handlePadam(cuti)}
                             title="Padam Cuti"
                             className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-md transition shadow-sm border border-red-100"
                           >
@@ -522,7 +721,151 @@ export default function RekodCuti() {
         </div>
       </div>
 
-      {/* MODAL DATA ENTRY PUKAL (BATCH ENTRY) */}
+      {/* MODAL KEMASUKAN DATA: TAMBAH JAM CUTI GANTIAN PUKAL */}
+      {isGantianModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300">
+          <div className="bg-white shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col rounded-2xl overflow-hidden border border-orange-100 transform transition-transform duration-300 scale-100">
+            
+            <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-orange-600 text-white shadow-sm">
+              <div>
+                <h2 className="text-xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian</h2>
+                <p className="text-xs text-orange-200 mt-1">Masukkan rekod jam kerja lebih masa untuk pelbagai pegawai serentak</p>
+              </div>
+              <button onClick={() => setIsGantianModalOpen(false)} className="text-orange-200 hover:text-white font-bold text-3xl leading-none transition">&times;</button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+              <form id="bulkGantianForm" onSubmit={handleGantianSubmit} className="space-y-6">
+                
+                {/* Tetapan Bulan, Tahun & Bilangan Baris */}
+                <div className="bg-white p-5 rounded-xl border border-orange-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col md:flex-row items-center gap-4">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xl hidden md:block">⏱️</span>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Bulan Rekod</label>
+                        <select 
+                          className="border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-orange-500 p-2 font-semibold outline-none transition"
+                          value={gantianBulanTahun.bulan}
+                          onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, bulan: e.target.value})}
+                        >
+                          <option value="01">Januari</option>
+                          <option value="02">Februari</option>
+                          <option value="03">Mac</option>
+                          <option value="04">April</option>
+                          <option value="05">Mei</option>
+                          <option value="06">Jun</option>
+                          <option value="07">Julai</option>
+                          <option value="08">Ogos</option>
+                          <option value="09">September</option>
+                          <option value="10">Oktober</option>
+                          <option value="11">November</option>
+                          <option value="12">Disember</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tahun</label>
+                      <select 
+                        className="border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-orange-500 p-2 font-semibold outline-none transition"
+                        value={gantianBulanTahun.tahun}
+                        onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, tahun: e.target.value})}
+                      >
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026">2026</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <label className="text-sm font-semibold text-gray-700">Bilangan Entry:</label>
+                    <select 
+                      className="border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 p-2 bg-white text-sm font-bold text-orange-600 outline-none cursor-pointer"
+                      value={bilanganGantianEntry} 
+                      onChange={(e) => setBilanganGantianEntry(parseInt(e.target.value))}
+                    >
+                      {[...Array(20)].map((_, i) => (
+                        <option key={i+1} value={i+1}>{i+1} Baris Entry</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table List for Entries */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                  <table className="w-full text-left whitespace-nowrap text-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-gray-600 text-xs uppercase font-bold border-b border-gray-200">
+                        <th className="p-4 w-12 text-center">#</th>
+                        <th className="p-4">Nama Pegawai & Bahagian</th>
+                        <th className="p-4 w-64 text-center text-orange-700">Jumlah Jam Diperoleh</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150">
+                      {gantianEntries.map((item, index) => (
+                         <tr key={index} className="hover:bg-orange-50/30 transition">
+                            <td className="p-4 text-center text-gray-400 font-bold">{index + 1}</td>
+                            <td className="p-4">
+                               <select 
+                                 className="w-full text-sm border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-medium bg-gray-50 focus:bg-white" 
+                                 value={item.ic_pegawai} 
+                                 onChange={(e) => updateGantianEntry(index, 'ic_pegawai', e.target.value)}
+                               >
+                                 <option value="">-- Sila Pilih Pegawai --</option>
+                                 {pilihanPegawai.map((p) => (
+                                   <option key={p.ic} value={p.ic}>{p.nama} ({p.jabatan_bahagian})</option>
+                                 ))}
+                               </select>
+                            </td>
+                            <td className="p-4">
+                               <input 
+                                 type="number" 
+                                 step="0.5" 
+                                 min="0" 
+                                 placeholder="Contoh: 9" 
+                                 className="w-full text-center text-base border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-black text-orange-700 bg-orange-50 p-2.5" 
+                                 value={item.jumlah_jam} 
+                                 onChange={(e) => updateGantianEntry(index, 'jumlah_jam', e.target.value)} 
+                               />
+                            </td>
+                         </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+              </form>
+            </div>
+
+            <div className="p-5 border-t border-gray-200 bg-white flex justify-between items-center shadow-md">
+              <span className="text-xs font-semibold text-gray-500 hidden md:block uppercase tracking-wider">
+                Sistem akan menjumlahkan jam ini dengan baki sedia ada.
+              </span>
+              <div className="flex space-x-3 w-full md:w-auto">
+                <button 
+                  type="button" 
+                  onClick={() => { setIsGantianModalOpen(false); resetBorangGantian(); }} 
+                  className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold text-sm transition duration-150"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  form="bulkGantianForm" 
+                  disabled={isSubmittingGantian} 
+                  className="w-full md:w-auto px-10 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold text-sm transition duration-150 flex items-center justify-center shadow-md disabled:bg-orange-400"
+                >
+                  {isSubmittingGantian ? "Sedang Memproses..." : "SIMPAN DATA PUKAL"}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DATA ENTRY PUKAL (BATCH ENTRY) CUTI */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300">
           <div className="bg-white shadow-2xl w-full max-w-[95vw] h-[95vh] flex flex-col rounded-2xl overflow-hidden border border-pink-100 transform transition-transform duration-300 scale-100">
@@ -647,7 +990,7 @@ export default function RekodCuti() {
 
             <div className="p-5 border-t border-gray-200 bg-white flex justify-between items-center shadow-md">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Sistem akan mengira bilangan hari secara pintar.
+                  Sistem akan menolak Baki Cuti / Cuti Gantian secara automatik.
                 </span>
                 <div className="flex space-x-3">
                     <button type="button" onClick={resetBorang} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold text-sm transition duration-150">

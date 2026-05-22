@@ -59,7 +59,7 @@ export default function RekodKursusAdmin() {
   }, []);
 
   const dapatkanPilihanPegawai = async () => {
-    const { data } = await supabase.from("pegawai").select("ic, nama, jabatan_bahagian").order("nama", { ascending: true });
+    const { data } = await supabase.from("pegawai").select("ic, nama, jabatan_bahagian, gred").order("nama", { ascending: true });
     if (data) setPilihanPegawai(data);
   };
 
@@ -73,15 +73,76 @@ export default function RekodKursusAdmin() {
   }, [carian, filterBahagian, filterTahun]);
 
   // =======================================================================
+  // LOGIK SUSUNAN BAHAGIAN & PANGKAT
+  // =======================================================================
+  const DEPT_ORDER = [
+    "PENGURUSAN TERTINGGI",
+    "LAWAS, KIBL",
+    "LAWAS, UNIT A",
+    "LAWAS, UNIT A & B",
+    "LAWAS, UNIT B",
+    "LAWAS, UNIT E",
+    "LAWAS, UNIT F,G,J",
+    "LAWAS, UNIT H",
+    "DERMAGA, DERMAGA",
+    "MENGKALAP, PINTU MASUK",
+    "MERAPOK, PINTU MASUK",
+    "SUNDAR, PEJABAT SUNDAR"
+  ];
+
+  const getDeptIndex = (dept: string) => {
+    if (!dept) return 999;
+    const upperDept = dept.toUpperCase();
+    const index = DEPT_ORDER.findIndex(d => d.toUpperCase() === upperDept);
+    if (index !== -1) return index;
+    if (upperDept.includes("DERMAGA")) {
+      const dermagaIndex = DEPT_ORDER.findIndex(d => d.toUpperCase() === "DERMAGA, DERMAGA");
+      return dermagaIndex !== -1 ? dermagaIndex : 999;
+    }
+    return 999;
+  };
+
+  const getRank = (g: string) => {
+    if (!g) return { prefixPriority: 0, num: 0, tbk: false };
+    const gUpper = g.toUpperCase();
+    let prefixPriority = 0;
+    if (gUpper.includes('KP')) prefixPriority = 3;
+    else if (gUpper.includes('N') || gUpper.includes('W')) prefixPriority = 2;
+    else if (gUpper.includes('H')) prefixPriority = 1;
+    
+    const numMatch = gUpper.match(/\d+/);
+    const num = numMatch ? parseInt(numMatch[0], 10) : 0;
+    const tbk = gUpper.includes('TBK');
+    return { prefixPriority, num, tbk };
+  };
+
+  const sortPegawaiMengikutPangkat = (a: any, b: any) => {
+    const deptA = a.jabatan_bahagian || "";
+    const deptB = b.jabatan_bahagian || "";
+    const indexA = getDeptIndex(deptA);
+    const indexB = getDeptIndex(deptB);
+    
+    if (indexA !== indexB) return indexA - indexB; 
+
+    const rankA = getRank(a.gred);
+    const rankB = getRank(b.gred);
+    
+    if (rankA.prefixPriority !== rankB.prefixPriority) return rankB.prefixPriority - rankA.prefixPriority; 
+    if (rankA.num !== rankB.num) return rankB.num - rankA.num; 
+    if (rankA.tbk !== rankB.tbk) return rankA.tbk ? 1 : -1; 
+    
+    return (a.nama || "").localeCompare(b.nama || ""); 
+  };
+
+
+  // =======================================================================
   // LOGIK PENGIRAAN PANTAUAN 40 JAM KURSUS
   // =======================================================================
   const tahunPantauan = filterTahun || new Date().getFullYear().toString();
   const jamPegawai: Record<string, number> = {};
   
-  // Tetapkan semua jam pegawai kepada 0
   pilihanPegawai.forEach(p => { jamPegawai[p.ic] = 0; });
   
-  // Tambah jam kursus mengikut tahun yang dipilih
   senaraiKursus.forEach(k => {
      const thn = k.tarikh_mula ? k.tarikh_mula.substring(0, 4) : "";
      if (thn === tahunPantauan && k.ic_pegawai && jamPegawai[k.ic_pegawai] !== undefined) {
@@ -89,18 +150,11 @@ export default function RekodKursusAdmin() {
      }
   });
 
-  const sortPegawai = (a: any, b: any) => {
-    const deptA = a.jabatan_bahagian || "";
-    const deptB = b.jabatan_bahagian || "";
-    if (deptA !== deptB) return deptA.localeCompare(deptB);
-    return a.nama.localeCompare(b.nama);
-  };
-
-  const senaraiKurang40 = pilihanPegawai.filter(p => jamPegawai[p.ic] < 40).map(p => ({ ...p, jumlah_jam: jamPegawai[p.ic] })).sort(sortPegawai);
-  const senaraiCukup40 = pilihanPegawai.filter(p => jamPegawai[p.ic] >= 40).map(p => ({ ...p, jumlah_jam: jamPegawai[p.ic] })).sort((a, b) => b.jumlah_jam - a.jumlah_jam); // Susun dari jam paling tinggi
+  const senaraiKurang40 = pilihanPegawai.filter(p => jamPegawai[p.ic] < 40).map(p => ({ ...p, jumlah_jam: jamPegawai[p.ic] })).sort(sortPegawaiMengikutPangkat);
+  const senaraiCukup40 = pilihanPegawai.filter(p => jamPegawai[p.ic] >= 40).map(p => ({ ...p, jumlah_jam: jamPegawai[p.ic] })).sort(sortPegawaiMengikutPangkat); 
 
   // =======================================================================
-  // FUNGSI EDIT KURSUS
+  // FUNGSI EDIT & PADAM KURSUS
   // =======================================================================
   const bukaModalEdit = (kursus: any) => {
     setEditFormData({
@@ -192,7 +246,9 @@ export default function RekodKursusAdmin() {
   // =======================================================================
   // LOGIK TAPISAN (FILTER) & PAGING JADUAL
   // =======================================================================
-  const senaraiBahagianUnik = Array.from(new Set(pilihanPegawai.map((p) => p.jabatan_bahagian).filter(Boolean))).sort();
+  const senaraiBahagianUnik = Array.from(new Set(pilihanPegawai.map((p) => p.jabatan_bahagian).filter(Boolean))).sort((a, b) => {
+      return getDeptIndex(a as string) - getDeptIndex(b as string);
+  });
 
   const kursusDitapis = senaraiKursus.filter((kursus) => {
     const kataKunci = carian.toLowerCase();
@@ -349,8 +405,55 @@ export default function RekodKursusAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50 p-8 print:p-0 print:bg-white">
+      {/* ========================================================
+        CSS CETAKAN PROFESIONAL & KEBAL (PRINT CSS) 
+        ======================================================== */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page { 
+            margin: 0.5cm; /* Buang Header & Footer Browser Automatik */
+          }
+          body, html { 
+            background-color: white !important;
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            height: auto !important;
+          }
+          /* Override ciri Tailwind yang menyebabkan kertas terpotong selepas 1 muka surat */
+          .h-screen, .min-h-screen, .max-h-screen, .h-full {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+          }
+          /* Benarkan jadual berkembang panjang ke bawah tanpa scroll */
+          .overflow-y-auto, .overflow-hidden {
+            overflow: visible !important;
+          }
+          /* SEMBUNYIKAN MENU SIDEBAR (layout.tsx) SECARA PAKSA */
+          aside, nav {
+            display: none !important;
+          }
+          /* Besarkan kawasan main (kandungan) supaya penuh kertas */
+          main {
+            flex: none !important;
+            width: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          /* Sembunyikan elemen utama sistem & pop-up yang tak perlu dicetak */
+          .print-hide {
+            display: none !important;
+          }
+          /* Paksa border jadual keluar dalam cetakan */
+          table { border-collapse: collapse !important; width: 100% !important; }
+          th, td { padding: 12px !important; }
+        }
+      `}} />
+
+      {/* 1. PAPARAN SISTEM BIASA (AKAN DISEMBUNYIKAN WAKTU CETAK) */}
+      <div className="max-w-7xl mx-auto print-hide">
         
         {/* Header Laman */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
@@ -406,7 +509,7 @@ export default function RekodKursusAdmin() {
            </div>
         </div>
 
-        {/* Kotak Carian & Filter (Advanced) */}
+        {/* Kotak Carian & Filter */}
         <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center">
           <div className="flex items-center space-x-3 md:w-1/4">
             <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">🎓</div>
@@ -514,9 +617,9 @@ export default function RekodKursusAdmin() {
         </div>
       </div>
 
-      {/* MODAL DATA ENTRY PUKAL (BATCH ENTRY) */}
+      {/* Modal Data Entry Pukal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300 print-hide">
           <div className="bg-white shadow-2xl w-full max-w-[95vw] h-[95vh] flex flex-col rounded-2xl overflow-hidden border border-indigo-100 transform transition-transform duration-300 scale-100">
             
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-slate-800 text-white shadow-sm">
@@ -641,9 +744,9 @@ export default function RekodKursusAdmin() {
         </div>
       )}
 
-      {/* MODAL EDIT (SINGLE ENTRY) */}
+      {/* Modal Edit (Single Entry) */}
       {isEditModalOpen && editFormData && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity print-hide">
           <div className="bg-white shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden border border-indigo-100">
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-white shadow-sm">
               <h2 className="text-xl font-bold text-gray-800 tracking-wide">Kemas Kini Rekod Kursus</h2>
@@ -771,10 +874,11 @@ export default function RekodKursusAdmin() {
         </div>
       )}
 
-      {/* MODAL PANTAUAN 40 JAM (SENARAI PEGAWAI) */}
+      {/* Modal Pantauan 40 Jam (Papar di Skrin - TIDAK DICETAK DARI SINI) */}
       {isPantauanModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity print-hide">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden relative">
+            
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-white shadow-sm">
               <div>
                 <h2 className={`text-xl font-black uppercase tracking-wide ${pantauanJenis === 'kurang' ? 'text-orange-600' : 'text-emerald-600'}`}>
@@ -784,43 +888,112 @@ export default function RekodKursusAdmin() {
                   Jumlah: {pantauanJenis === 'kurang' ? senaraiKurang40.length : senaraiCukup40.length} Pegawai
                 </p>
               </div>
-              <button onClick={() => setIsPantauanModalOpen(false)} className="text-gray-400 hover:text-red-500 font-bold text-3xl leading-none transition">&times;</button>
+              <div className="flex space-x-3 items-center">
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm"
+                >
+                  <span className="mr-2">🖨️</span> Cetak PDF
+                </button>
+                <button onClick={() => setIsPantauanModalOpen(false)} className="text-gray-400 hover:text-red-500 font-bold text-3xl leading-none transition">&times;</button>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto bg-slate-50">
-              <table className="w-full text-left whitespace-nowrap text-sm">
-                <thead className="bg-slate-100 border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-                  <tr>
-                    <th className="p-4 font-semibold text-center w-12 text-gray-600">Bil.</th>
-                    <th className="p-4 font-semibold text-gray-600">Nama Pegawai</th>
-                    <th className="p-4 font-semibold text-gray-600">Bahagian / Unit</th>
-                    <th className="p-4 font-semibold text-center w-32 text-gray-600">Jumlah Jam Terkumpul</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).length === 0 ? (
+            <div className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-8">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-100 border-b border-gray-200 sticky top-0 z-10">
                     <tr>
-                      <td colSpan={4} className="p-8 text-center text-gray-500 font-medium">Tiada rekod pegawai dijumpai untuk kategori ini.</td>
+                      <th className="p-4 font-semibold text-center w-12 text-gray-600 border-b">Bil.</th>
+                      <th className="p-4 font-semibold text-gray-600 border-b">Nama Pegawai</th>
+                      <th className="p-4 font-semibold text-gray-600 border-b w-32">Gred</th>
+                      <th className="p-4 font-semibold text-gray-600 border-b w-64">Bahagian / Unit</th>
+                      <th className="p-4 font-semibold text-center w-40 text-gray-600 border-b">Jam Terkumpul</th>
                     </tr>
-                  ) : (
-                    (pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).map((pegawai, index) => (
-                      <tr key={pegawai.ic} className="hover:bg-white transition duration-150">
-                        <td className="p-4 text-center text-gray-500 font-medium">{index + 1}</td>
-                        <td className="p-4 font-bold text-gray-800">{pegawai.nama}</td>
-                        <td className="p-4 text-gray-600 text-xs font-semibold">{pegawai.jabatan_bahagian || '-'}</td>
-                        <td className="p-4 text-center">
-                          <span className={`px-4 py-1.5 rounded-full text-sm font-black shadow-sm border ${
-                            pantauanJenis === 'kurang' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          }`}>
-                            {pegawai.jumlah_jam.toFixed(1)} Jam
-                          </span>
-                        </td>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-gray-500 font-medium">Tiada rekod pegawai dijumpai untuk kategori ini.</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      (pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).map((pegawai, index) => (
+                        <tr key={pegawai.ic} className="hover:bg-gray-50 transition duration-150">
+                          <td className="p-4 text-center text-gray-500 font-medium border-b border-gray-100">{index + 1}</td>
+                          <td className="p-4 font-bold text-gray-800 border-b border-gray-100 leading-snug uppercase">{pegawai.nama}</td>
+                          <td className="p-4 text-gray-600 font-semibold border-b border-gray-100">{pegawai.gred || '-'}</td>
+                          <td className="p-4 text-gray-600 text-xs font-semibold border-b border-gray-100 uppercase">{pegawai.jabatan_bahagian || '-'}</td>
+                          <td className="p-4 text-center border-b border-gray-100">
+                            <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-black shadow-sm border ${
+                              pantauanJenis === 'kurang' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
+                              {pegawai.jumlah_jam.toFixed(1)} Jam
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================================== */}
+      {/* 2. PAPARAN KHAS CETAKAN (HANYA MUNCUL SEMASA PRINT DI BUAT - REKA BENTUK CANTIK)    */}
+      {/* =================================================================================== */}
+      {isPantauanModalOpen && (
+        <div id="print-area" className="hidden print:block w-full bg-white text-black p-8">
+          
+          {/* Header Surat Cetakan */}
+          <div className="text-center mb-8 border-b-2 border-slate-300 pb-6">
+            <h2 className={`text-2xl font-black uppercase tracking-widest ${pantauanJenis === 'kurang' ? 'text-orange-600' : 'text-emerald-600'}`}>
+              {pantauanJenis === 'kurang' ? `Senarai Pegawai Belum Mencapai 40 Jam` : `Senarai Pegawai Telah Mencapai 40 Jam`}
+            </h2>
+            <p className="font-bold mt-2 text-lg text-slate-700">Sistem Pemantauan Kursus Kakitangan (Tahun {tahunPantauan})</p>
+            <p className="font-semibold mt-1 text-slate-500">Jumlah: {pantauanJenis === 'kurang' ? senaraiKurang40.length : senaraiCukup40.length} Pegawai</p>
+          </div>
+          
+          {/* Jadual Cetakan Yang Cantik */}
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-slate-100 border-b-2 border-slate-300">
+                <th className="py-4 px-4 font-bold text-center w-12 text-slate-700">Bil.</th>
+                <th className="py-4 px-4 font-bold text-slate-700">Nama Pegawai</th>
+                <th className="py-4 px-4 font-bold w-32 text-slate-700">Gred</th>
+                <th className="py-4 px-4 font-bold w-64 text-slate-700">Bahagian / Unit</th>
+                <th className="py-4 px-4 font-bold text-center w-40 text-slate-700">Jam Terkumpul</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {(pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center font-medium italic text-gray-500">Tiada rekod pegawai dijumpai untuk kategori ini.</td>
+                </tr>
+              ) : (
+                (pantauanJenis === 'kurang' ? senaraiKurang40 : senaraiCukup40).map((pegawai, index) => (
+                  <tr key={pegawai.ic} className="break-inside-avoid">
+                    <td className="py-4 px-4 text-center text-gray-600">{index + 1}</td>
+                    <td className="py-4 px-4 font-bold text-gray-800 uppercase">{pegawai.nama}</td>
+                    <td className="py-4 px-4 font-semibold text-gray-700">{pegawai.gred || '-'}</td>
+                    <td className="py-4 px-4 text-xs font-semibold text-gray-600 uppercase">{pegawai.jabatan_bahagian || '-'}</td>
+                    <td className="py-4 px-4 text-center">
+                      <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-black border shadow-sm ${
+                        pantauanJenis === 'kurang' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        {pegawai.jumlah_jam.toFixed(1)} Jam
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          
+          <div className="mt-10 text-center text-xs text-gray-500 italic">
+            Dicetak oleh Sistem e-Pegawai pada: {new Date().toLocaleString('ms-MY')}
           </div>
         </div>
       )}
