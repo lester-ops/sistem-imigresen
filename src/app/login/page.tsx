@@ -11,20 +11,19 @@ export default function Login() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // State baharu untuk menyimpan senarai pengguna bagi tujuan dropdown
   const [senaraiPengguna, setSenaraiPengguna] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   
   const router = useRouter(); 
 
-  // Ambil senarai ID pengguna sebaik sahaja laman dibuka
+  // Ambil senarai ID pengguna sebaik sahaja laman dibuka (Untuk Dropdown)
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const { data, error } = await supabase
           .from("pengguna_sistem")
           .select("username, role, bahagian_akses")
-          .order("role", { ascending: true }) // Admin duduk atas
+          .order("role", { ascending: true })
           .order("username", { ascending: true });
 
         if (error) throw error;
@@ -51,39 +50,50 @@ export default function Login() {
         return;
       }
 
-      // Semak dengan Supabase jadual 'pengguna_sistem'
-      const { data, error } = await supabase
+      // 1. FORMAT KEPADA EMEL TIRUAN UNTUK SUPABASE AUTH
+      const emelRasmi = `${username.toLowerCase()}@sistem.local`;
+
+      // 2. LOG MASUK MENGGUNAKAN SUPABASE AUTH (SISTEM KESELAMATAN RASMI)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: emelRasmi,
+        password: password,
+      });
+
+      if (authError) {
+        console.error("Auth Error:", authError.message);
+        setErrorMsg("Kata laluan (Password) salah atau pengguna tidak didaftarkan di Auth!");
+        setLoading(false);
+        return;
+      }
+
+      // 3. JIKA BERJAYA (AUTHENTICATED), AMBIL PERANAN DARI JADUAL PENGGUNA
+      const { data: userData, error: userError } = await supabase
         .from("pengguna_sistem")
         .select("*")
         .eq("username", username)
-        .eq("password", password)
-        .single(); // Ambil satu rekod sahaja
+        .single();
 
-      if (error && error.code === 'PGRST116') {
-        setErrorMsg("Kata laluan (Password) salah!");
-      } else if (error) {
-        console.error("Ralat Supabase:", error);
-        setErrorMsg("Ralat pangkalan data: " + error.message);
-      } else if (!data) {
-        setErrorMsg("Kata laluan (Password) salah!");
-      } else {
-        // Log masuk berjaya, simpan ke localStorage
-        localStorage.setItem("userRole", data.role);
-        localStorage.setItem("username", data.username);
-        localStorage.setItem("bahagianAkses", data.bahagian_akses || "");
-
-        // KOD BARU: Simpan ke HTTP Cookie supaya Middleware (Server) boleh baca
-        // Tetapkan masa luput (max-age) selama 86400 saat (1 hari)
-        document.cookie = `userRole=${data.role}; path=/; max-age=86400`;
-        document.cookie = `username=${data.username}; path=/; max-age=86400`;
-
-        // Hantar user ke halaman yang betul berdasarkan Role
-        if (data.role === "ADMIN") {
-          router.push("/admin/dashboard");
-        } else {
-          router.push("/bahagian/kursus");
-        }
+      if (userError || !userData) {
+        setErrorMsg("Profil pengguna tidak dijumpai di pangkalan data.");
+        setLoading(false);
+        return;
       }
+
+      // 4. SIMPAN SESI SEPERTI BIASA
+      localStorage.setItem("userRole", userData.role);
+      localStorage.setItem("username", userData.username);
+      localStorage.setItem("bahagianAkses", userData.bahagian_akses || "");
+
+      document.cookie = `userRole=${userData.role}; path=/; max-age=86400`;
+      document.cookie = `username=${userData.username}; path=/; max-age=86400`;
+
+      // Hantar user ke halaman yang betul
+      if (userData.role === "ADMIN") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/bahagian/kursus");
+      }
+
     } catch (err) {
       console.error("Ralat sistem:", err);
       setErrorMsg("Berlaku ralat sistem. Sila cuba lagi.");
@@ -96,7 +106,6 @@ export default function Login() {
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-4 border-emerald-600 relative overflow-hidden">
         
-        {/* Butang kembali ke laman utama */}
         <Link href="/" className="absolute top-4 left-4 text-xs font-bold text-slate-400 hover:text-emerald-600 transition">
           &larr; Laman Utama
         </Link>
@@ -106,7 +115,6 @@ export default function Login() {
           <p className="text-slate-500 text-sm mt-1 font-medium">Sistem Pengurusan e-Pegawai</p>
         </div>
 
-        {/* Papar ralat jika ada */}
         {errorMsg && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-3 mb-6 rounded-lg text-sm font-bold text-center">
             {errorMsg}
@@ -155,7 +163,7 @@ export default function Login() {
             disabled={loading || loadingUsers}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-lg transition duration-200 shadow-md disabled:bg-slate-400 mt-2"
           >
-            {loading ? "Sedang menyemak..." : "Log Masuk Penuh"}
+            {loading ? "Sedang disahkan (Secured)..." : "Log Masuk Penuh"}
           </button>
         </form>
 
