@@ -18,6 +18,13 @@ export default function LaporanIndividu() {
   const [senaraiCuti, setSenaraiCuti] = useState<any[]>([]);
   const [senaraiKursus, setSenaraiKursus] = useState<any[]>([]);
 
+  // Fungsi utiliti untuk format tarikh Malaysia (DD/MM/YYYY)
+  const formatTarikhMY = (tarikhDB: string) => {
+    if (!tarikhDB) return "-";
+    const [year, month, day] = tarikhDB.split("-");
+    return `${day}/${month}/${year}`;
+  };
+
   // Dapatkan senarai dropdown pegawai
   useEffect(() => {
     const ambilPegawai = async () => {
@@ -103,15 +110,12 @@ export default function LaporanIndividu() {
             min-height: 0 !important;
             max-height: none !important;
           }
-          /* Benarkan jadual berkembang panjang ke bawah tanpa scroll */
           .overflow-y-auto, .overflow-hidden {
             overflow: visible !important;
           }
-          /* SEMBUNYIKAN MENU SIDEBAR (layout.tsx) SECARA PAKSA */
           aside, nav {
             display: none !important;
           }
-          /* Besarkan kawasan main (kandungan) supaya penuh kertas */
           main {
             flex: none !important;
             width: 100% !important;
@@ -119,15 +123,12 @@ export default function LaporanIndividu() {
             margin: 0 !important;
             padding: 0 !important;
           }
-          /* Sembunyikan elemen utama sistem & pop-up yang tak perlu dicetak */
           .print-hide {
             display: none !important;
           }
-          /* Pastikan table tak terpotong */
           table { page-break-inside: auto; width: 100% !important; }
           tr { page-break-inside: avoid; page-break-after: auto; }
           thead { display: table-header-group; }
-          /* Baiki alignment untuk laporan */
           #laporan-dokumen {
             box-shadow: none !important;
             border: none !important;
@@ -258,7 +259,7 @@ export default function LaporanIndividu() {
                       <div className="text-xs font-bold text-red-500 uppercase mb-1">Telah Diambil</div>
                       <div className="text-2xl font-black text-red-600">-{jumlahCutiRehatDiambil}</div>
                     </div>
-                    <div className="bg-emerald-50 print:bg-transparent p-4 rounded-lg border border-emerald-400 text-center">
+                    <div className="bg-emerald-50 print:bg-transparent p-4 rounded-lg border border-emerald-400 text-center shadow-inner">
                       <div className="text-xs font-bold text-emerald-600 uppercase mb-1">Baki Semasa</div>
                       <div className="text-2xl font-black text-emerald-700">{bakiSemasaCuti}</div>
                     </div>
@@ -290,7 +291,9 @@ export default function LaporanIndividu() {
                           <tr key={i} className="bg-transparent">
                             <td className="p-3 border border-slate-300 text-center text-gray-800">{i + 1}</td>
                             <td className="p-3 border border-slate-300 font-semibold text-gray-800">{cuti.jenis_cuti} {cuti.klinik ? `(${cuti.klinik})` : ''}</td>
-                            <td className="p-3 border border-slate-300 text-gray-800 whitespace-nowrap font-medium">{cuti.tarikh_mula === cuti.tarikh_tamat ? cuti.tarikh_mula : `${cuti.tarikh_mula} - ${cuti.tarikh_tamat}`}</td>
+                            <td className="p-3 border border-slate-300 text-gray-800 whitespace-nowrap font-medium">
+                              {cuti.tarikh_mula === cuti.tarikh_tamat ? formatTarikhMY(cuti.tarikh_mula) : `${formatTarikhMY(cuti.tarikh_mula)} - ${formatTarikhMY(cuti.tarikh_tamat)}`}
+                            </td>
                             <td className="p-3 border border-slate-300 text-center font-bold text-gray-900">{cuti.bilangan_hari}</td>
                             <td className="p-3 border border-slate-300 text-gray-700 italic">{cuti.catatan || '-'}</td>
                           </tr>
@@ -349,7 +352,9 @@ export default function LaporanIndividu() {
                               <div className="text-gray-600 mt-1">{kursus.jenis_khusus || ''}</div>
                             </td>
                             <td className="p-3 border border-slate-300 font-semibold text-slate-900 uppercase">{kursus.nama_kursus}</td>
-                            <td className="p-3 border border-slate-300 text-gray-800 text-xs whitespace-nowrap font-medium">{kursus.tarikh_mula === kursus.tarikh_tamat ? kursus.tarikh_mula : `${kursus.tarikh_mula} - ${kursus.tarikh_tamat}`}</td>
+                            <td className="p-3 border border-slate-300 text-gray-800 text-xs whitespace-nowrap font-medium">
+                              {kursus.tarikh_mula === kursus.tarikh_tamat ? formatTarikhMY(kursus.tarikh_mula) : `${formatTarikhMY(kursus.tarikh_mula)} - ${formatTarikhMY(kursus.tarikh_tamat)}`}
+                            </td>
                             <td className="p-3 border border-slate-300 text-center font-bold text-slate-900">{kursus.jumlah_jam}</td>
                           </tr>
                         ))}

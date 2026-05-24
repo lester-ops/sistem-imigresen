@@ -20,6 +20,13 @@ export default function Dashboard() {
     tahun: new Date().getFullYear().toString()
   });
 
+  // Fungsi utiliti untuk format tarikh Malaysia (DD/MM/YYYY)
+  const formatTarikhMY = (tarikhDB: string) => {
+    if (!tarikhDB) return "-";
+    const [year, month, day] = tarikhDB.split("-");
+    return `${day}/${month}/${year}`;
+  };
+
   useEffect(() => {
     async function muatTurunDataDashboard() {
       try {
@@ -36,7 +43,6 @@ export default function Dashboard() {
         setJumlahPegawai(totalPegawai);
 
         // 2. Dapatkan senarai Pegawai yang Bercuti HARI INI
-        // Logik: Tarikh mula mestilah <= hari ini, dan Tarikh tamat mestilah >= hari ini
         const { data: dataCutiHariIni } = await supabase
           .from("cuti_transaksi")
           .select("id, jenis_cuti, tarikh_mula, tarikh_tamat, pegawai(nama, jabatan_bahagian)")
@@ -206,7 +212,7 @@ export default function Dashboard() {
                                   {cuti.jenis_cuti}
                                 </span>
                                 <span className="text-xs text-slate-500 font-medium">
-                                  Hingga: <span className="text-slate-800 font-bold">{cuti.tarikh_tamat}</span>
+                                  Hingga: <span className="text-slate-800 font-bold">{formatTarikhMY(cuti.tarikh_tamat)}</span>
                                 </span>
                             </div>
                           </li>
@@ -239,7 +245,7 @@ export default function Dashboard() {
                                 <div>
                                   <p className="text-sm font-bold text-slate-800">{cuti.pegawai?.nama || "Tiada Rekod"}</p>
                                   <p className="text-xs text-slate-500 mt-1">
-                                    Memohon <span className="font-bold text-slate-700">{cuti.jenis_cuti}</span> bermula <span className="font-bold text-slate-700">{cuti.tarikh_mula}</span>
+                                    Memohon <span className="font-bold text-slate-700">{cuti.jenis_cuti}</span> bermula <span className="font-bold text-slate-700">{formatTarikhMY(cuti.tarikh_mula)}</span>
                                   </p>
                                 </div>
                               </div>

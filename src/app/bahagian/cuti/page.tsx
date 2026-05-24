@@ -3,7 +3,24 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function RekodCuti() {
+export default function RekodCutiBahagian() {
+  // =======================================================================
+  // BACA SESI LOGIN SEBENAR DARI LOCALSTORAGE
+  // =======================================================================
+  const [sessionRole, setSessionRole] = useState("");
+  const [sessionBahagian, setSessionBahagian] = useState("");
+  const [isClient, setIsClient] = useState(false); 
+
+  useEffect(() => {
+    const role = localStorage.getItem("userRole") || "";
+    const bahagian = localStorage.getItem("bahagianAkses") || "";
+    
+    setSessionRole(role);
+    setSessionBahagian(bahagian);
+    setIsClient(true);
+  }, []);
+  // =======================================================================
+
   const [senaraiCuti, setSenaraiCuti] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -23,11 +40,11 @@ export default function RekodCuti() {
   const [pilihanPegawai, setPilihanPegawai] = useState<any[]>([]);
   const [tarikhCutiUmum, setTarikhCutiUmum] = useState<string[]>([]);
   
-  // --- STATE UNTUK EDIT CUTI (SINGLE) ---
+  // State untuk Edit Cuti (Single)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
 
-  // --- STATE UNTUK TAMBAH JAM CUTI GANTIAN ---
+  // State untuk Tambah Jam Cuti Gantian
   const [isGantianModalOpen, setIsGantianModalOpen] = useState(false);
   const [isSubmittingGantian, setIsSubmittingGantian] = useState(false);
   const [bilanganGantianEntry, setBilanganGantianEntry] = useState(1);
@@ -36,13 +53,10 @@ export default function RekodCuti() {
     bulan: String(new Date().getMonth() + 1).padStart(2, '0'),
   });
 
-  const janaBarisGantianKosong = () => ({
-    ic_pegawai: "",
-    jumlah_jam: ""
-  });
+  const janaBarisGantianKosong = () => ({ ic_pegawai: "", jumlah_jam: "" });
   const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
 
-  // --- STATE UNTUK BORANG PUKAL DINAMIK ---
+  // State untuk Borang Pukal Dinamik Cuti
   const [bilanganEntry, setBilanganEntry] = useState(1);
   const janaBarisKosong = () => ({
     ic_pegawai: "", kategori_pegawai: "", jenis_cuti: "", klinik: "",
@@ -50,9 +64,7 @@ export default function RekodCuti() {
   });
   const [entries, setEntries] = useState<any[]>(() => [janaBarisKosong()]);
 
-  // =======================================================================
-  // FUNGSI UTILITI FORMAT TARIKH (DD/MM/YYYY)
-  // =======================================================================
+  // Fungsi utiliti format tarikh (DD/MM/YYYY)
   const formatTarikhMY = (tarikhDB: string) => {
     if (!tarikhDB) return "-";
     const parts = tarikhDB.split("-");
@@ -60,7 +72,7 @@ export default function RekodCuti() {
       const [year, month, day] = parts;
       return `${day}/${month}/${year}`;
     }
-    return tarikhDB; // Fallback jika format pelik
+    return tarikhDB;
   };
 
   const dapatkanDataCuti = useCallback(async () => {
@@ -103,7 +115,6 @@ export default function RekodCuti() {
     setCurrentPage(1);
   }, [carian, filterBahagian, filterTahun]);
 
-  // --- LOGIK PENGIRAAN CUTI (PEJABAT / SIF / KELOMPOK) ---
   const kiraBilanganHari = (mula: string, tamat: string, kategori: string, jenisCuti: string, hariOff: number) => {
     if (!mula || !tamat) return 0;
     const dMula = new Date(mula);
@@ -134,24 +145,110 @@ export default function RekodCuti() {
   };
 
   // =======================================================================
+  // FUNGSI DATA ENTRY CUTI GANTIAN (PUKAL - KHAS UNIT)
+  // =======================================================================
+  useEffect(() => {
+    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
+    setGantianEntries((prev) => {
+      const salinan = [...prev];
+      if (jumlahBaru > salinan.length) {
+        for (let i = salinan.length; i < jumlahBaru; i++) {
+          salinan.push(janaBarisGantianKosong());
+        }
+      } else {
+        salinan.length = jumlahBaru;
+      }
+      return salinan;
+    });
+  }, [bilanganGantianEntry]);
+
+  const updateGantianEntry = (index: number, field: string, value: any) => {
+    const salinan = [...gantianEntries];
+    salinan[index] = { ...salinan[index], [field]: value };
+    setGantianEntries(salinan);
+  };
+
+  const resetBorangGantian = () => {
+    setBilanganGantianEntry(1);
+    setGantianEntries([janaBarisGantianKosong()]);
+  };
+
+  const handleGantianSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingGantian(true);
+    try {
+      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
+      if (validEntries.length === 0) {
+          alert("Sila isi sekurang-kurangnya satu rekod jam gantian dengan lengkap.");
+          setIsSubmittingGantian(false); return;
+      }
+
+      const icSet = new Set();
+      for (const item of validEntries) {
+         if (icSet.has(item.ic_pegawai)) {
+            alert("Terdapat pegawai yang dipilih lebih dari sekali dalam senarai borang. Sila satukan jumlah jam pegawai tersebut.");
+            setIsSubmittingGantian(false); return;
+         }
+         icSet.add(item.ic_pegawai);
+      }
+
+      const { data: existingBaki, error: errFetch } = await supabase
+          .from("cuti_baki")
+          .select("id, ic_pegawai, baki_gantian_jam")
+          .eq("tahun", gantianBulanTahun.tahun)
+          .in("ic_pegawai", Array.from(icSet));
+
+      if (errFetch) throw errFetch;
+
+      const existingMap = new Map();
+      existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
+
+      for (const item of validEntries) {
+         const jamTambah = parseFloat(item.jumlah_jam);
+         if (isNaN(jamTambah) || jamTambah <= 0) continue;
+
+         const rekodLama = existingMap.get(item.ic_pegawai);
+         let bakiTerkini = jamTambah;
+
+         if (rekodLama) {
+            bakiTerkini += (rekodLama.baki_gantian_jam || 0);
+            await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id);
+         } else {
+            await supabase.from("cuti_baki").insert({
+                ic_pegawai: item.ic_pegawai, tahun: gantianBulanTahun.tahun,
+                baki_bawa_hadapan: 0, baki_gantian_jam: jamTambah
+            });
+         }
+      }
+
+      alert(`Berjaya! ${validEntries.length} rekod jam cuti gantian telah disimpan.`);
+      setIsGantianModalOpen(false);
+      resetBorangGantian();
+      dapatkanDataCuti();
+    } catch (err: any) {
+        alert("Gagal merekod jam cuti gantian pukal: " + err.message);
+    } finally {
+        setIsSubmittingGantian(false);
+    }
+  };
+
+  // =======================================================================
   // FUNGSI EDIT CUTI (SINGLE ENTRY)
   // =======================================================================
   const bukaModalEdit = (cuti: any) => {
+    // Kawalan Keselamatan
+    if (cuti.pegawai?.jabatan_bahagian !== sessionBahagian) {
+        alert(`Akses Ditolak: Anda hanya boleh mengemas kini rekod cuti pegawai di bawah unit ${sessionBahagian} sahaja.`);
+        return;
+    }
+
     setEditFormData({
-      id: cuti.id,
-      ic_pegawai: cuti.ic_pegawai,
-      nama_pegawai: cuti.pegawai?.nama,
-      kategori_pegawai: cuti.kategori_pegawai || "Pejabat",
-      jenis_cuti: cuti.jenis_cuti || "",
-      original_jenis_cuti: cuti.jenis_cuti || "", // Rujukan untuk refund jam gantian
-      original_bilangan_hari: cuti.bilangan_hari || 0, // Rujukan untuk refund jam gantian
-      tahun: cuti.tahun,
-      klinik: cuti.klinik || "",
-      tarikh_mula: cuti.tarikh_mula || "",
-      tarikh_tamat: cuti.tarikh_tamat || "",
-      hari_off: cuti.hari_off?.toString() || "0",
-      bilangan_hari: cuti.bilangan_hari || 0,
-      catatan: cuti.catatan || "",
+      id: cuti.id, ic_pegawai: cuti.ic_pegawai, nama_pegawai: cuti.pegawai?.nama,
+      kategori_pegawai: cuti.kategori_pegawai || "Pejabat", jenis_cuti: cuti.jenis_cuti || "",
+      original_jenis_cuti: cuti.jenis_cuti || "", original_bilangan_hari: cuti.bilangan_hari || 0, 
+      tahun: cuti.tahun, klinik: cuti.klinik || "", tarikh_mula: cuti.tarikh_mula || "",
+      tarikh_tamat: cuti.tarikh_tamat || "", hari_off: cuti.hari_off?.toString() || "0",
+      bilangan_hari: cuti.bilangan_hari || 0, catatan: cuti.catatan || "",
     });
     setIsEditModalOpen(true);
   };
@@ -159,11 +256,8 @@ export default function RekodCuti() {
   useEffect(() => {
     if (editFormData && isEditModalOpen) {
       const hari = kiraBilanganHari(
-        editFormData.tarikh_mula, 
-        editFormData.tarikh_tamat, 
-        editFormData.kategori_pegawai, 
-        editFormData.jenis_cuti, 
-        parseFloat(editFormData.hari_off) || 0
+        editFormData.tarikh_mula, editFormData.tarikh_tamat, editFormData.kategori_pegawai, 
+        editFormData.jenis_cuti, parseFloat(editFormData.hari_off) || 0
       );
       if (editFormData.bilangan_hari !== hari) {
         setEditFormData((prev: any) => ({ ...prev, bilangan_hari: hari }));
@@ -174,24 +268,16 @@ export default function RekodCuti() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
     try {
-        if (editFormData.bilangan_hari < 0) {
-            alert("Ralat: Tarikh Tamat tidak boleh sebelum Tarikh Mula.");
-            setIsSubmitting(false); return;
-        }
+        if (editFormData.bilangan_hari < 0) { alert("Ralat: Tarikh Tamat tidak boleh sebelum Tarikh Mula."); setIsSubmitting(false); return; }
 
-        // Semakan Pertindihan (Cuti & Kursus)
         const semakMula = editFormData.tarikh_mula;
         const semakTamat = editFormData.tarikh_tamat;
 
         const { data: dbCuti } = await supabase.from("cuti_transaksi").select("id, jenis_cuti, tarikh_mula, tarikh_tamat")
           .eq("ic_pegawai", editFormData.ic_pegawai).lte("tarikh_mula", semakTamat).gte("tarikh_tamat", semakMula).neq("id", editFormData.id);
 
-        if (dbCuti && dbCuti.length > 0) {
-           alert(`PERTINDIHAN CUTI\n\nPegawai ini sudah mempunyai cuti lain pada tarikh tersebut:\n${dbCuti[0].jenis_cuti}`);
-           setIsSubmitting(false); return;
-        }
+        if (dbCuti && dbCuti.length > 0) { alert(`PERTINDIHAN CUTI\n\nPegawai ini sudah mempunyai cuti lain pada tarikh tersebut:\n${dbCuti[0].jenis_cuti}`); setIsSubmitting(false); return; }
 
         const { data: dbKursus } = await supabase.from("kursus_rekod").select("jenis_khusus, nama_kursus, tarikh_mula, tarikh_tamat")
           .eq("ic_pegawai", editFormData.ic_pegawai).lte("tarikh_mula", semakTamat).gte("tarikh_tamat", semakMula);
@@ -206,32 +292,24 @@ export default function RekodCuti() {
 
         const tahunCuti = new Date(editFormData.tarikh_mula).getFullYear();
         
-        // 1. KEMAS KINI REKOD CUTI
         const { error } = await supabase.from("cuti_transaksi").update({
-          kategori_pegawai: editFormData.kategori_pegawai,
-          jenis_cuti: editFormData.jenis_cuti,
+          kategori_pegawai: editFormData.kategori_pegawai, jenis_cuti: editFormData.jenis_cuti,
           klinik: editFormData.jenis_cuti === "Cuti Sakit" ? editFormData.klinik : null,
-          tarikh_mula: editFormData.tarikh_mula,
-          tarikh_tamat: editFormData.tarikh_tamat,
+          tarikh_mula: editFormData.tarikh_mula, tarikh_tamat: editFormData.tarikh_tamat,
           hari_off: editFormData.kategori_pegawai === "Sif" ? (parseFloat(editFormData.hari_off) || 0) : 0,
-          bilangan_hari: editFormData.bilangan_hari,
-          tahun: tahunCuti,
-          catatan: editFormData.catatan || null,
+          bilangan_hari: editFormData.bilangan_hari, tahun: tahunCuti, catatan: editFormData.catatan || null,
         }).eq("id", editFormData.id);
 
         if (error) throw error;
 
-        // 2. LOGIK PELARASAN JAM CUTI GANTIAN (Jika ada perubahan)
         let perubahanJamGantian = 0;
         const isOldGantian = editFormData.original_jenis_cuti === "Cuti Gantian";
         const isNewGantian = editFormData.jenis_cuti === "Cuti Gantian";
 
         if (isOldGantian) {
-            // Pulangkan (refund) jam lamanya
             perubahanJamGantian += (editFormData.original_bilangan_hari * 9);
         }
         if (isNewGantian) {
-            // Tolak jam barunya
             perubahanJamGantian -= (editFormData.bilangan_hari * 9);
         }
 
@@ -252,17 +330,17 @@ export default function RekodCuti() {
         setIsEditModalOpen(false);
         dapatkanDataCuti();
 
-    } catch (err: any) {
-        alert("Gagal mengemas kini rekod: " + err.message);
-    } finally {
-        setIsSubmitting(false);
-    }
+    } catch (err: any) { alert("Gagal mengemas kini rekod: " + err.message); } finally { setIsSubmitting(false); }
   };
 
   // =======================================================================
   // FUNGSI MEMADAM REKOD CUTI
   // =======================================================================
   const handlePadam = async (cuti: any) => {
+    // Kawalan Keselamatan
+    if (cuti.pegawai?.jabatan_bahagian !== sessionBahagian) {
+        alert("Akses Ditolak! Anda bukan Admin untuk bahagian ini."); return;
+    }
     const sahkan = confirm(`Adakah anda pasti untuk memadam rekod cuti ini?\n\nPegawai: ${cuti.pegawai?.nama}\nJenis: ${cuti.jenis_cuti}`);
     if (!sahkan) return;
     try {
@@ -320,102 +398,11 @@ export default function RekodCuti() {
   const totalPages = Math.ceil(cutiDitapis.length / itemsPerPage);
 
   // =======================================================================
-  // FUNGSI DATA ENTRY: TAMBAH JAM CUTI GANTIAN (PUKAL)
-  // =======================================================================
-  useEffect(() => {
-    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
-    setGantianEntries((prev) => {
-      const salinan = [...prev];
-      if (jumlahBaru > salinan.length) {
-        for (let i = salinan.length; i < jumlahBaru; i++) {
-          salinan.push(janaBarisGantianKosong());
-        }
-      } else {
-        salinan.length = jumlahBaru;
-      }
-      return salinan;
-    });
-  }, [bilanganGantianEntry]);
-
-  const updateGantianEntry = (index: number, field: string, value: any) => {
-    const salinan = [...gantianEntries];
-    salinan[index] = { ...salinan[index], [field]: value };
-    setGantianEntries(salinan);
-  };
-
-  const resetBorangGantian = () => {
-    setBilanganGantianEntry(1);
-    setGantianEntries([janaBarisGantianKosong()]);
-  };
-
-  const handleGantianSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingGantian(true);
-    try {
-      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
-
-      if (validEntries.length === 0) {
-          alert("Sila isi sekurang-kurangnya satu rekod jam gantian dengan lengkap.");
-          setIsSubmittingGantian(false); return;
-      }
-
-      // Semakan: Pastikan IC tidak berulang dalam form
-      const icSet = new Set();
-      for (const item of validEntries) {
-         if (icSet.has(item.ic_pegawai)) {
-            alert("Terdapat pegawai yang dipilih lebih dari sekali dalam senarai borang. Sila satukan jumlah jam pegawai tersebut.");
-            setIsSubmittingGantian(false); return;
-         }
-         icSet.add(item.ic_pegawai);
-      }
-
-      // 1. Dapatkan Baki Sedia Ada
-      const { data: existingBaki, error: errFetch } = await supabase
-          .from("cuti_baki")
-          .select("id, ic_pegawai, baki_gantian_jam")
-          .eq("tahun", gantianBulanTahun.tahun)
-          .in("ic_pegawai", Array.from(icSet));
-
-      if (errFetch) throw errFetch;
-
-      const existingMap = new Map();
-      existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
-
-      // 2. Loop dan Proses Setiap Rekod
-      for (const item of validEntries) {
-         const jamTambah = parseFloat(item.jumlah_jam);
-         if (isNaN(jamTambah) || jamTambah <= 0) continue;
-
-         const rekodLama = existingMap.get(item.ic_pegawai);
-         let bakiTerkini = jamTambah;
-
-         if (rekodLama) {
-            bakiTerkini += (rekodLama.baki_gantian_jam || 0);
-            await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id);
-         } else {
-            await supabase.from("cuti_baki").insert({
-                ic_pegawai: item.ic_pegawai,
-                tahun: gantianBulanTahun.tahun,
-                baki_bawa_hadapan: 0,
-                baki_gantian_jam: jamTambah
-            });
-         }
-      }
-
-      alert(`Berjaya! ${validEntries.length} rekod jam cuti gantian telah disimpan.`);
-      setIsGantianModalOpen(false);
-      resetBorangGantian();
-      
-    } catch (err: any) {
-        alert("Gagal merekod jam cuti gantian pukal: " + err.message);
-    } finally {
-        setIsSubmittingGantian(false);
-    }
-  };
-
-  // =======================================================================
   // LOGIK BORANG PUKAL CUTI TRANSAKSI
   // =======================================================================
+  // Tapis pegawai untuk dropdown - Hanya tunjuk nama dari Bahagian Login
+  const pilihanPegawaiUnitSahaja = pilihanPegawai.filter(p => p.jabatan_bahagian === sessionBahagian);
+
   useEffect(() => {
     const jumlahBaru = parseInt(bilanganEntry.toString()) || 1;
     setEntries((prev) => {
@@ -545,22 +532,31 @@ export default function RekodCuti() {
         {/* Header Laman */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Senarai Rekod Cuti</h1>
-            <p className="text-gray-500 text-sm mt-1">Sistem Pengurusan & Pengiraan Cuti Berjadual</p>
+            <h1 className="text-3xl font-bold text-gray-800">Senarai Rekod Cuti (Semua Jabatan)</h1>
+            {isClient && sessionBahagian ? (
+                <p className="text-teal-600 font-bold text-sm mt-1">Anda log masuk sebagai Admin: {sessionBahagian}</p>
+            ) : (
+                <p className="text-gray-500 text-sm mt-1">Memuat turun data pengguna...</p>
+            )}
           </div>
           <div className="flex space-x-3">
-            <button 
-              onClick={() => { resetBorangGantian(); setIsGantianModalOpen(true); }}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
-            >
-              <span className="mr-2">⏱️</span> Tambah Jam Gantian (Batch)
-            </button>
-            <button 
-              onClick={() => { resetBorang(); setIsModalOpen(true); }}
-              className="bg-pink-600 hover:bg-pink-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
-            >
-              <span className="mr-2">+</span> Permohonan Cuti (Batch)
-            </button>
+            {/* HANYA NAMPAK JIKA ADA BAHAGIAN LOGIN */}
+            {isClient && sessionBahagian && sessionRole === "USER" && (
+              <>
+                <button 
+                  onClick={() => { resetBorangGantian(); setIsGantianModalOpen(true); }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
+                >
+                  <span className="mr-2">⏱️</span> Tambah Jam Gantian Unit
+                </button>
+                <button 
+                  onClick={() => { resetBorang(); setIsModalOpen(true); }}
+                  className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide"
+                >
+                  <span className="mr-2">+</span> Data Entry Cuti Unit
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -573,12 +569,12 @@ export default function RekodCuti() {
         {/* Kotak Carian & Filter */}
         <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center">
           <div className="flex items-center space-x-3 md:w-1/4">
-            <div className="bg-pink-100 text-pink-600 p-2 rounded-lg">🏖️</div>
+            <div className="bg-teal-100 text-teal-600 p-2 rounded-lg">🏖️</div>
             <span className="font-bold text-gray-700 text-sm">Tapisan Rekod</span>
           </div>
           <div className="w-full md:w-1/4">
             <select 
-              className="w-full border-gray-200 bg-gray-50 rounded-lg text-sm px-4 py-2.5 outline-none focus:ring-2 focus:ring-pink-500 border transition cursor-pointer text-gray-700 font-semibold"
+              className="w-full border-gray-200 bg-gray-50 rounded-lg text-sm px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 border transition cursor-pointer text-gray-700 font-semibold"
               value={filterTahun}
               onChange={(e) => setFilterTahun(e.target.value)}
             >
@@ -590,7 +586,7 @@ export default function RekodCuti() {
           </div>
           <div className="w-full md:w-1/3">
             <select 
-              className="w-full border-gray-200 bg-gray-50 rounded-lg text-sm px-4 py-2.5 outline-none focus:ring-2 focus:ring-pink-500 border transition cursor-pointer text-gray-700 font-semibold"
+              className="w-full border-gray-200 bg-gray-50 rounded-lg text-sm px-4 py-2.5 outline-none focus:ring-2 focus:ring-teal-500 border transition cursor-pointer text-gray-700 font-semibold"
               value={filterBahagian}
               onChange={(e) => setFilterBahagian(e.target.value)}
             >
@@ -600,7 +596,7 @@ export default function RekodCuti() {
               ))}
             </select>
           </div>
-          <div className="flex items-center flex-1 bg-gray-50 rounded-lg border border-gray-200 px-4 py-2.5 w-full focus-within:ring-2 focus-within:ring-pink-500 transition">
+          <div className="flex items-center flex-1 bg-gray-50 rounded-lg border border-gray-200 px-4 py-2.5 w-full focus-within:ring-2 focus-within:ring-teal-500 transition">
             <span className="text-gray-400 mr-2">🔍</span>
             <input 
               type="text"
@@ -612,7 +608,7 @@ export default function RekodCuti() {
           </div>
         </div>
 
-        {/* JADUAL REKOD CUTI (ADMIN VIEW) */}
+        {/* JADUAL REKOD CUTI */}
         <div className="bg-white rounded-xl shadow-md border border-gray-200 flex flex-col overflow-hidden">
           <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] relative">
             {loading ? (
@@ -629,7 +625,7 @@ export default function RekodCuti() {
                     <th className="p-4 font-semibold text-center w-24 sticky top-0 bg-slate-800 z-10 shadow-sm border-slate-900">Hari Off</th>
                     <th className="p-4 font-semibold text-center w-24 sticky top-0 bg-slate-800 z-10 shadow-sm border-slate-900">Hari Cuti</th>
                     <th className="p-4 font-semibold sticky top-0 bg-slate-800 z-10 shadow-sm border-slate-900">Catatan</th>
-                    <th className="p-4 font-semibold text-center w-24 sticky top-0 bg-slate-800 z-10 shadow-sm border-slate-900">Tindakan</th>
+                    <th className="p-4 font-semibold text-center w-32 sticky top-0 bg-slate-800 z-10 shadow-sm border-slate-900">Tindakan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -638,8 +634,12 @@ export default function RekodCuti() {
                       <td colSpan={9} className="p-8 text-center text-gray-500">Tiada rekod transaksi cuti dijumpai berdasarkan tapisan.</td>
                     </tr>
                   ) : (
-                    currentItems.map((cuti, index) => (
-                      <tr key={cuti.id} className="hover:bg-pink-50/50 transition duration-150 group">
+                    currentItems.map((cuti, index) => {
+                      // Kawalan Read-Only jika unit tak sepadan
+                      const isLayakModify = isClient && sessionBahagian && cuti.pegawai?.jabatan_bahagian === sessionBahagian;
+
+                      return (
+                      <tr key={cuti.id} className="hover:bg-teal-50/50 transition duration-150 group">
                         <td className="p-4 text-gray-600 text-center">{indexOfFirstItem + index + 1}</td>
                         <td className="p-4">
                             <div className="font-semibold text-gray-900">{cuti.pegawai?.nama || 'Tiada Rekod'}</div>
@@ -663,26 +663,32 @@ export default function RekodCuti() {
                               : `${formatTarikhMY(cuti.tarikh_mula)} hingga ${formatTarikhMY(cuti.tarikh_tamat)}`}
                         </td>
                         <td className="p-4 text-center text-gray-500 font-semibold">{cuti.hari_off || '0'}</td>
-                        <td className="p-4 font-bold text-center text-pink-600 text-lg">{cuti.bilangan_hari}</td>
+                        <td className="p-4 font-bold text-center text-teal-600 text-lg">{cuti.bilangan_hari}</td>
                         <td className="p-4 text-gray-500 max-w-[150px] truncate" title={cuti.catatan}>{cuti.catatan || '-'}</td>
-                        <td className="p-4 text-center flex justify-center space-x-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => bukaModalEdit(cuti)}
-                            title="Edit Cuti"
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-2 rounded-md transition shadow-sm border border-blue-100"
-                          >
-                            ✏️
-                          </button>
-                          <button 
-                            onClick={() => handlePadam(cuti)}
-                            title="Padam Cuti"
-                            className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-md transition shadow-sm border border-red-100"
-                          >
-                            🗑️
-                          </button>
+                        <td className="p-4 text-center flex justify-center space-x-2">
+                          {isLayakModify ? (
+                            <>
+                              <button 
+                                onClick={() => bukaModalEdit(cuti)}
+                                title="Edit Cuti"
+                                className="bg-teal-50 hover:bg-teal-100 text-teal-600 p-2 rounded-md transition shadow-sm border border-teal-100 opacity-100 md:opacity-0 group-hover:opacity-100"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                onClick={() => handlePadam(cuti)}
+                                title="Padam Cuti"
+                                className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-md transition shadow-sm border border-red-100 opacity-100 md:opacity-0 group-hover:opacity-100"
+                              >
+                                🗑️
+                              </button>
+                            </>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-400 border border-gray-200 text-[10px] font-bold px-2 py-1 rounded">Lihat Sahaja</span>
+                          )}
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
@@ -703,7 +709,7 @@ export default function RekodCuti() {
                 >
                   &larr; Prev
                 </button>
-                <div className="flex items-center px-4 font-bold text-pink-700">
+                <div className="flex items-center px-4 font-bold text-teal-700">
                   {currentPage} / {totalPages}
                 </div>
                 <button 
@@ -720,14 +726,14 @@ export default function RekodCuti() {
       </div>
 
       {/* MODAL KEMASUKAN DATA: TAMBAH JAM CUTI GANTIAN PUKAL */}
-      {isGantianModalOpen && (
+      {isGantianModalOpen && isClient && sessionBahagian && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300">
           <div className="bg-white shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col rounded-2xl overflow-hidden border border-orange-100 transform transition-transform duration-300 scale-100">
             
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-orange-600 text-white shadow-sm">
               <div>
-                <h2 className="text-xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian</h2>
-                <p className="text-xs text-orange-200 mt-1">Masukkan rekod jam kerja lebih masa untuk pelbagai pegawai serentak</p>
+                <h2 className="text-xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian Unit</h2>
+                <p className="text-xs text-orange-200 mt-1">Unit: {sessionBahagian}</p>
               </div>
               <button onClick={() => setIsGantianModalOpen(false)} className="text-orange-200 hover:text-white font-bold text-3xl leading-none transition">&times;</button>
             </div>
@@ -796,7 +802,7 @@ export default function RekodCuti() {
                     <thead>
                       <tr className="bg-slate-100 text-gray-600 text-xs uppercase font-bold border-b border-gray-200">
                         <th className="p-4 w-12 text-center">#</th>
-                        <th className="p-4">Nama Pegawai & Bahagian</th>
+                        <th className="p-4">Nama Pegawai (Unit Sahaja)</th>
                         <th className="p-4 w-64 text-center text-orange-700">Jumlah Jam Diperoleh</th>
                       </tr>
                     </thead>
@@ -806,13 +812,13 @@ export default function RekodCuti() {
                             <td className="p-4 text-center text-gray-400 font-bold">{index + 1}</td>
                             <td className="p-4">
                                <select 
-                                 className="w-full text-sm border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-medium bg-gray-50 focus:bg-white p-2" 
+                                 className="w-full text-sm border-gray-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 font-medium bg-gray-50 focus:bg-white p-2 outline-none" 
                                  value={item.ic_pegawai} 
                                  onChange={(e) => updateGantianEntry(index, 'ic_pegawai', e.target.value)}
                                >
                                  <option value="">-- Sila Pilih Pegawai --</option>
-                                 {pilihanPegawai.map((p) => (
-                                   <option key={p.ic} value={p.ic}>{p.nama} ({p.jabatan_bahagian})</option>
+                                 {pilihanPegawaiUnitSahaja.map((p) => (
+                                   <option key={p.ic} value={p.ic}>{p.nama}</option>
                                  ))}
                                </select>
                             </td>
@@ -822,7 +828,7 @@ export default function RekodCuti() {
                                  step="0.5" 
                                  min="0" 
                                  placeholder="Contoh: 9" 
-                                 className="w-full text-center text-base border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-black text-orange-700 bg-orange-50 p-2.5" 
+                                 className="w-full text-center text-base border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500 font-black text-orange-700 bg-orange-50 p-2.5 outline-none" 
                                  value={item.jumlah_jam} 
                                  onChange={(e) => updateGantianEntry(index, 'jumlah_jam', e.target.value)} 
                                />
@@ -864,14 +870,14 @@ export default function RekodCuti() {
       )}
 
       {/* MODAL DATA ENTRY PUKAL (BATCH ENTRY) CUTI */}
-      {isModalOpen && (
+      {isModalOpen && isClient && sessionBahagian && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300">
-          <div className="bg-white shadow-2xl w-full max-w-[95vw] h-[95vh] flex flex-col rounded-2xl overflow-hidden border border-pink-100 transform transition-transform duration-300 scale-100">
+          <div className="bg-white shadow-2xl w-full max-w-[95vw] h-[95vh] flex flex-col rounded-2xl overflow-hidden border border-teal-100 transform transition-transform duration-300 scale-100">
             
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-slate-800 text-white shadow-sm">
               <div>
-                <h2 className="text-2xl font-bold tracking-wide">Permohonan Cuti (Batch Entry)</h2>
-                <p className="text-xs text-slate-300 mt-1">Konfigurasi kemasukan data cuti secara pintar bagi berlainan pegawai</p>
+                <h2 className="text-2xl font-bold tracking-wide">Permohonan Cuti (Batch Entry Unit)</h2>
+                <p className="text-xs text-teal-200 mt-1">Unit: {sessionBahagian}</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-300 hover:text-red-400 font-bold text-3xl leading-none transition duration-150">&times;</button>
             </div>
@@ -879,7 +885,7 @@ export default function RekodCuti() {
             <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
               <form id="batchCutiForm" onSubmit={handleSubmit} className="space-y-6">
                 
-                <div className="bg-white p-5 rounded-xl border border-pink-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="bg-white p-5 rounded-xl border border-teal-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center space-x-3">
                     <span className="text-xl">📊</span>
                     <div>
@@ -890,7 +896,7 @@ export default function RekodCuti() {
                   <div className="flex items-center space-x-3">
                     <label className="text-sm font-semibold text-gray-700">Bilangan Entry:</label>
                     <select 
-                      className="border-gray-300 rounded-lg shadow-sm focus:ring-pink-500 focus:border-pink-500 p-2 bg-white text-sm font-bold text-pink-600 outline-none cursor-pointer"
+                      className="border-gray-300 rounded-lg shadow-sm focus:ring-teal-500 focus:border-teal-500 p-2 bg-white text-sm font-bold text-teal-600 outline-none cursor-pointer"
                       value={bilanganEntry} 
                       onChange={(e) => setBilanganEntry(parseInt(e.target.value))}
                     >
@@ -913,7 +919,7 @@ export default function RekodCuti() {
                                 <th className="p-3 w-40">TARIKH MULA</th>
                                 <th className="p-3 w-40">TARIKH TAMAT</th>
                                 <th className="p-3 w-28 text-center">HARI OFF</th>
-                                <th className="p-3 w-24 text-center bg-pink-500/10 text-pink-900">HARI</th>
+                                <th className="p-3 w-24 text-center bg-teal-500/10 text-teal-300">HARI</th>
                                 <th className="p-3">CATATAN</th>
                             </tr>
                         </thead>
@@ -925,24 +931,24 @@ export default function RekodCuti() {
                                 const canEditOff = isSif && !isKelompok;
 
                                 return (
-                                <tr key={index} className="hover:bg-pink-50/40 transition duration-100">
+                                <tr key={index} className="hover:bg-teal-50/40 transition duration-100">
                                     <td className="p-2 text-center text-gray-400 font-bold">{index + 1}</td>
                                     
                                     <td className="p-2">
                                         <select 
-                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-pink-500 focus:border-pink-500 font-medium p-2 outline-none" 
+                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500 font-medium p-2 outline-none" 
                                           value={item.ic_pegawai} 
                                           onChange={(e) => updateEntry(index, 'ic_pegawai', e.target.value)}
                                         >
                                             <option value="">Pilih Pegawai...</option>
-                                            {pilihanPegawai.map((p) => (<option key={p.ic} value={p.ic}>{p.nama}</option>))}
+                                            {pilihanPegawaiUnitSahaja.map((p) => (<option key={p.ic} value={p.ic}>{p.nama}</option>))}
                                         </select>
                                     </td>
 
                                     <td className="p-2 text-center">
                                         <select 
                                           disabled={!item.ic_pegawai} 
-                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100 font-bold text-gray-700 p-2 outline-none" 
+                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100 font-bold text-gray-700 p-2 outline-none" 
                                           value={item.kategori_pegawai} 
                                           onChange={(e) => updateEntry(index, 'kategori_pegawai', e.target.value)}
                                         >
@@ -955,7 +961,7 @@ export default function RekodCuti() {
                                     <td className="p-2">
                                         <select 
                                           disabled={!item.ic_pegawai} 
-                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100 font-semibold p-2 outline-none" 
+                                          className="w-full text-xs border-gray-300 rounded-md focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100 font-semibold p-2 outline-none" 
                                           value={item.jenis_cuti} 
                                           onChange={(e) => updateEntry(index, 'jenis_cuti', e.target.value)}
                                         >
@@ -972,7 +978,7 @@ export default function RekodCuti() {
                                     <td className="p-2">
                                         <select 
                                           disabled={!isSakit} 
-                                          className={`w-full text-xs rounded-md border-gray-300 focus:ring-pink-500 focus:border-pink-500 p-2 outline-none ${!isSakit ? 'bg-gray-100 text-gray-400' : 'bg-white font-medium'}`} 
+                                          className={`w-full text-xs rounded-md border-gray-300 focus:ring-teal-500 focus:border-teal-500 p-2 outline-none ${!isSakit ? 'bg-gray-100 text-gray-400' : 'bg-white font-medium'}`} 
                                           value={item.klinik} 
                                           onChange={(e) => updateEntry(index, 'klinik', e.target.value)}
                                         >
@@ -986,7 +992,7 @@ export default function RekodCuti() {
                                       <input 
                                         type="date" 
                                         disabled={!item.ic_pegawai} 
-                                        className="w-full text-xs border-gray-300 rounded-md focus:ring-pink-500 disabled:bg-gray-100 font-medium p-2 outline-none" 
+                                        className="w-full text-xs border-gray-300 rounded-md focus:ring-teal-500 disabled:bg-gray-100 font-medium p-2 outline-none" 
                                         value={item.tarikh_mula} 
                                         onChange={(e) => updateEntry(index, 'tarikh_mula', e.target.value)} 
                                       />
@@ -996,7 +1002,7 @@ export default function RekodCuti() {
                                       <input 
                                         type="date" 
                                         disabled={!item.ic_pegawai} 
-                                        className="w-full text-xs border-gray-300 rounded-md focus:ring-pink-500 disabled:bg-gray-100 font-medium p-2 outline-none" 
+                                        className="w-full text-xs border-gray-300 rounded-md focus:ring-teal-500 disabled:bg-gray-100 font-medium p-2 outline-none" 
                                         value={item.tarikh_tamat} 
                                         onChange={(e) => updateEntry(index, 'tarikh_tamat', e.target.value)} 
                                       />
@@ -1008,17 +1014,17 @@ export default function RekodCuti() {
                                           min="0" 
                                           step="0.5" 
                                           disabled={!canEditOff} 
-                                          className={`w-full text-xs rounded-md text-center border-gray-300 focus:ring-pink-500 p-2 outline-none ${!canEditOff ? 'bg-gray-100 text-gray-400' : 'bg-white font-bold text-gray-800'}`} 
+                                          className={`w-full text-xs rounded-md text-center border-gray-300 focus:ring-teal-500 p-2 outline-none ${!canEditOff ? 'bg-gray-100 text-gray-400' : 'bg-white font-bold text-gray-800'}`} 
                                           value={item.hari_off} 
                                           onChange={(e) => updateEntry(index, 'hari_off', e.target.value)} 
                                         />
                                     </td>
 
-                                    <td className="p-2 text-center bg-pink-500/5">
+                                    <td className="p-2 text-center bg-teal-500/5">
                                         <input 
                                           type="text" 
                                           readOnly 
-                                          className={`w-20 text-center font-bold text-xs rounded-md border-none focus:outline-none bg-transparent p-2 ${item.hari_dikira < 0 ? 'text-red-600 font-extrabold animate-pulse' : 'text-pink-700'}`} 
+                                          className={`w-20 text-center font-bold text-xs rounded-md border-none focus:outline-none bg-transparent p-2 ${item.hari_dikira < 0 ? 'text-red-600 font-extrabold animate-pulse' : 'text-teal-700'}`} 
                                           value={item.hari_dikira < 0 ? 'Ralat' : `${item.hari_dikira} Hari`} 
                                         />
                                     </td>
@@ -1027,7 +1033,7 @@ export default function RekodCuti() {
                                         <input 
                                           type="text" 
                                           disabled={!item.ic_pegawai} 
-                                          className="w-full text-xs border-gray-300 rounded-md disabled:bg-gray-100 p-2 outline-none focus:ring-pink-500" 
+                                          className="w-full text-xs border-gray-300 rounded-md disabled:bg-gray-100 p-2 outline-none focus:ring-teal-500" 
                                           placeholder="Sebab..." 
                                           value={item.catatan} 
                                           onChange={(e) => updateEntry(index, 'catatan', e.target.value)} 
@@ -1050,7 +1056,7 @@ export default function RekodCuti() {
                     <button type="button" onClick={resetBorang} className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-semibold text-sm transition duration-150">
                       Reset
                     </button>
-                    <button type="submit" form="batchCutiForm" disabled={isSubmitting} className="w-full md:w-auto px-10 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-bold text-sm transition duration-150 flex items-center justify-center shadow-md disabled:bg-pink-400">
+                    <button type="submit" form="batchCutiForm" disabled={isSubmitting} className="w-full md:w-auto px-10 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-sm transition duration-150 flex items-center justify-center shadow-md disabled:bg-teal-400">
                       {isSubmitting ? "Sedang Menyimpan..." : "Hantar Semua Permohonan"}
                     </button>
                 </div>
@@ -1061,9 +1067,9 @@ export default function RekodCuti() {
       )}
 
       {/* MODAL EDIT (SINGLE ENTRY CUTI) */}
-      {isEditModalOpen && editFormData && (
+      {isEditModalOpen && editFormData && isClient && sessionBahagian && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity print-hide">
-          <div className="bg-white shadow-2xl w-full max-w-2xl flex flex-col rounded-2xl overflow-hidden border border-pink-100">
+          <div className="bg-white shadow-2xl w-full max-w-2xl flex flex-col rounded-2xl overflow-hidden border border-teal-100">
             <div className="p-6 border-b border-gray-150 flex justify-between items-center bg-white shadow-sm">
               <h2 className="text-xl font-bold text-gray-800 tracking-wide">Kemas Kini Rekod Cuti</h2>
               <button onClick={() => { setIsEditModalOpen(false); setEditFormData(null); }} className="text-gray-400 hover:text-red-500 font-bold text-2xl leading-none transition">&times;</button>
@@ -1081,7 +1087,7 @@ export default function RekodCuti() {
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Kategori</label>
                   <select 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 bg-white font-bold text-gray-700 text-sm outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white font-bold text-gray-700 text-sm outline-none" 
                     value={editFormData.kategori_pegawai} 
                     onChange={(e) => setEditFormData({...editFormData, kategori_pegawai: e.target.value})}
                   >
@@ -1092,7 +1098,7 @@ export default function RekodCuti() {
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jenis Cuti</label>
                   <select 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 bg-white font-bold text-gray-700 text-sm outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white font-bold text-gray-700 text-sm outline-none" 
                     value={editFormData.jenis_cuti} 
                     onChange={(e) => setEditFormData({...editFormData, jenis_cuti: e.target.value})}
                   >
@@ -1111,7 +1117,7 @@ export default function RekodCuti() {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label>
                   <input 
                     type="date" 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 bg-white text-sm font-medium outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm font-medium outline-none" 
                     value={editFormData.tarikh_mula} 
                     onChange={(e) => setEditFormData({...editFormData, tarikh_mula: e.target.value})} 
                   />
@@ -1120,7 +1126,7 @@ export default function RekodCuti() {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat</label>
                   <input 
                     type="date" 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 bg-white text-sm font-medium outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm font-medium outline-none" 
                     value={editFormData.tarikh_tamat} 
                     onChange={(e) => setEditFormData({...editFormData, tarikh_tamat: e.target.value})} 
                   />
@@ -1134,7 +1140,7 @@ export default function RekodCuti() {
                     type="number" 
                     step="0.5" 
                     disabled={editFormData.kategori_pegawai !== "Sif" || editFormData.jenis_cuti === "Cuti Kelompok"} 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 disabled:bg-gray-100 disabled:text-gray-400 font-bold bg-white text-sm outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 disabled:text-gray-400 font-bold bg-white text-sm outline-none" 
                     value={editFormData.hari_off} 
                     onChange={(e) => setEditFormData({...editFormData, hari_off: e.target.value})} 
                   />
@@ -1144,7 +1150,7 @@ export default function RekodCuti() {
                   <input 
                     type="number" 
                     step="0.5" 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 font-bold text-pink-600 bg-pink-50 text-sm outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 font-bold text-teal-700 bg-teal-50 text-sm outline-none" 
                     value={editFormData.bilangan_hari} 
                     onChange={(e) => setEditFormData({...editFormData, bilangan_hari: parseFloat(e.target.value) || 0})} 
                   />
@@ -1153,7 +1159,7 @@ export default function RekodCuti() {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Klinik</label>
                   <select 
                     disabled={editFormData.jenis_cuti !== "Cuti Sakit"} 
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 disabled:bg-gray-100 disabled:text-gray-400 bg-white font-medium text-sm outline-none" 
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 disabled:text-gray-400 bg-white font-medium text-sm outline-none" 
                     value={editFormData.klinik} 
                     onChange={(e) => setEditFormData({...editFormData, klinik: e.target.value})}
                   >
@@ -1168,7 +1174,7 @@ export default function RekodCuti() {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Catatan</label>
                 <input 
                   type="text" 
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 bg-white text-sm outline-none" 
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm outline-none" 
                   placeholder="Catatan permohonan..." 
                   value={editFormData.catatan} 
                   onChange={(e) => setEditFormData({...editFormData, catatan: e.target.value})} 
@@ -1187,7 +1193,7 @@ export default function RekodCuti() {
               <button 
                 onClick={handleEditSubmit} 
                 disabled={isSubmitting} 
-                className="px-10 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-lg font-bold text-sm transition duration-150 flex items-center justify-center shadow-md disabled:bg-pink-400"
+                className="px-10 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold text-sm transition duration-150 flex items-center justify-center shadow-md disabled:bg-teal-400"
               >
                 {isSubmitting ? "Menyimpan..." : "Kemas Kini Rekod"}
               </button>

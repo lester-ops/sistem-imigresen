@@ -23,7 +23,7 @@ export default function TetapanCutiUmum() {
       const { data, error } = await supabase
         .from("cuti_umum")
         .select("*")
-        .order("tarikh", { ascending: false }); // Susun dari yang paling baru/akan datang
+        .order("tarikh", { ascending: true }); // Ditukar kepada 'true' supaya tersusun mengikut kronologi tarikh (awal ke akhir)
 
       if (error) {
         setErrorMsg(error.message);

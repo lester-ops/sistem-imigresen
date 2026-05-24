@@ -38,6 +38,13 @@ export default function RekodKursusAdmin() {
   });
   const [entries, setEntries] = useState<any[]>([janaBarisKosong()]);
 
+  // Fungsi utiliti format tarikh Malaysia (DD/MM/YYYY)
+  const formatTarikhMY = (tarikhDB: string) => {
+    if (!tarikhDB) return "-";
+    const [year, month, day] = tarikhDB.split("-");
+    return `${day}/${month}/${year}`;
+  };
+
   const dapatkanDataKursus = useCallback(async () => {
     try {
       setLoading(true);
@@ -162,8 +169,7 @@ export default function RekodKursusAdmin() {
       kategori_utama: kursus.kategori_utama || "", jenis_khusus: kursus.jenis_khusus || "",
       nama_kursus: kursus.nama_kursus || "", penganjur: kursus.penganjur || "",
       tempat: kursus.tempat || "", tarikh_mula: kursus.tarikh_mula || "",
-      tarikh_tamat: kursus.tarikh_tamat || "", masa_mula: kursus.masa_mula || "",
-      masa_tamat: kursus.masa_tamat || "", jumlah_jam: kursus.jumlah_jam?.toString() || "",
+      tarikh_tamat: kursus.tarikh_tamat || "", jumlah_jam: kursus.jumlah_jam?.toString() || "",
       kategori_epsa: kursus.kategori_epsa || "",
     });
     setIsEditModalOpen(true);
@@ -215,7 +221,6 @@ export default function RekodKursusAdmin() {
           kategori_utama: editFormData.kategori_utama, jenis_khusus: editFormData.jenis_khusus,
           nama_kursus: finalNama, penganjur: editFormData.penganjur || null, tempat: editFormData.tempat || null,
           kategori_epsa: editFormData.kategori_epsa || null, tarikh_mula: finalTarikhMula, tarikh_tamat: finalTarikhTamat,
-          masa_mula: editFormData.masa_mula || null, masa_tamat: editFormData.masa_tamat || null,
           jumlah_jam: editFormData.jumlah_jam ? parseFloat(editFormData.jumlah_jam) : null,
         };
 
@@ -249,7 +254,7 @@ export default function RekodKursusAdmin() {
     kursusDitapis.forEach((kursus, index) => {
       const baris = [
         index + 1, `"${kursus.pegawai?.nama || '-'}"`, `"${kursus.pegawai?.jabatan_bahagian || '-'}"`, `"${kursus.kategori_utama || '-'}"`,
-        `"${kursus.jenis_khusus || '-'}"`, `"${kursus.nama_kursus || '-'}"`, `"${kursus.tarikh_mula || '-'}"`, `"${kursus.tarikh_tamat || '-'}"`, `"${kursus.jumlah_jam || '0'}"`
+        `"${kursus.jenis_khusus || '-'}"`, `"${kursus.nama_kursus || '-'}"`, `"${formatTarikhMY(kursus.tarikh_mula)}"`, `"${formatTarikhMY(kursus.tarikh_tamat)}"`, `"${kursus.jumlah_jam || '0'}"`
       ];
       csvRows.push(baris.join(","));
     });
@@ -370,7 +375,7 @@ export default function RekodKursusAdmin() {
           ic_pegawai: item.ic_pegawai, kategori_utama: item.kategori_utama, jenis_khusus: item.jenis_khusus,
           nama_kursus: finalNama, penganjur: item.penganjur || null, tempat: item.tempat || null,
           kategori_epsa: item.kategori_epsa || null, tarikh_mula: finalTarikhMula, tarikh_tamat: finalTarikhTamat,
-          masa_mula: item.masa_mula || null, masa_tamat: item.masa_tamat || null, jumlah_jam: item.jumlah_jam ? parseFloat(item.jumlah_jam) : null,
+          jumlah_jam: item.jumlah_jam ? parseFloat(item.jumlah_jam) : null,
         };
       });
 
@@ -621,7 +626,7 @@ export default function RekodKursusAdmin() {
                         </td>
                         <td className="p-4 text-gray-800 font-medium truncate max-w-sm" title={kursus.nama_kursus}>{kursus.nama_kursus}</td>
                         <td className="p-4 text-gray-600 text-xs font-medium">
-                           {kursus.tarikh_mula === kursus.tarikh_tamat ? kursus.tarikh_mula : `${kursus.tarikh_mula}\nhingga\n${kursus.tarikh_tamat}`}
+                           {kursus.tarikh_mula === kursus.tarikh_tamat ? formatTarikhMY(kursus.tarikh_mula) : `${formatTarikhMY(kursus.tarikh_mula)}\nhingga\n${formatTarikhMY(kursus.tarikh_tamat)}`}
                         </td>
                         <td className="p-4 font-bold text-center text-indigo-600 text-base">{kursus.jumlah_jam || '0'}</td>
                         <td className="p-4 text-center flex justify-center space-x-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
@@ -652,7 +657,7 @@ export default function RekodKursusAdmin() {
         </div>
       </div>
 
-      {/* Modal Data Entry Pukal */}
+      {/* MODAL DATA ENTRY PUKAL (BATCH ENTRY) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity duration-300 print-hide">
           <div className="bg-white shadow-2xl w-full max-w-[95vw] h-[95vh] flex flex-col rounded-2xl overflow-hidden border border-indigo-100 transform transition-transform duration-300 scale-100">
@@ -874,18 +879,6 @@ export default function RekodKursusAdmin() {
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat / Selesai</label>
                     <input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.tarikh_tamat} onChange={(e) => handleEditDateChange('tarikh_tamat', e.target.value)} />
                   </div>
-                  {editFormData.kategori_utama !== "3. Pembelajaran Kendiri" && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Mula</label>
-                        <input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.masa_mula} onChange={(e) => setEditFormData({...editFormData, masa_mula: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Tamat</label>
-                        <input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.masa_tamat} onChange={(e) => setEditFormData({...editFormData, masa_tamat: e.target.value})} />
-                      </div>
-                    </>
-                  )}
                   {editFormData.jenis_khusus !== "AI Untuk Rakyat" && (
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label>
