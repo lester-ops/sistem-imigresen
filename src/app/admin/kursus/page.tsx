@@ -169,6 +169,24 @@ export default function RekodKursusAdmin() {
     setIsEditModalOpen(true);
   };
 
+  const handleEditDateChange = (field: string, value: string) => {
+    setEditFormData((prev: any) => {
+      const updated = { ...prev, [field]: value };
+      // Auto-kira jam untuk Kursus / Latihan (1 Hari = 6 Jam)
+      if (updated.kategori_utama === "1. Kursus / Latihan" && updated.tarikh_mula && updated.tarikh_tamat) {
+        const dMula = new Date(updated.tarikh_mula); 
+        const dTamat = new Date(updated.tarikh_tamat);
+        if (dTamat >= dMula) {
+          const days = Math.round((dTamat.getTime() - dMula.getTime()) / (1000 * 3600 * 24)) + 1;
+          updated.jumlah_jam = (days * 6).toString();
+        } else {
+          updated.jumlah_jam = "0";
+        }
+      }
+      return updated;
+    });
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -283,6 +301,23 @@ export default function RekodKursusAdmin() {
     const salinan = [...entries];
     salinan[index] = { ...salinan[index], [field]: value };
     if (field === 'kategori_utama') salinan[index].jenis_khusus = ""; // Reset jenis khusus
+    
+    // Auto-kira jam untuk Kursus / Latihan (1 Hari = 6 Jam)
+    if (salinan[index].kategori_utama === "1. Kursus / Latihan") {
+      const mula = salinan[index].tarikh_mula;
+      const tamat = salinan[index].tarikh_tamat;
+      if (mula && tamat) {
+        const dMula = new Date(mula);
+        const dTamat = new Date(tamat);
+        if (dTamat >= dMula) {
+          const days = Math.round((dTamat.getTime() - dMula.getTime()) / (1000 * 3600 * 24)) + 1;
+          salinan[index].jumlah_jam = (days * 6).toString();
+        } else {
+          salinan[index].jumlah_jam = "0";
+        }
+      }
+    }
+    
     setEntries(salinan);
   };
 
@@ -356,10 +391,11 @@ export default function RekodKursusAdmin() {
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Nama Kursus / Latihan</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.nama_kursus} onChange={(e) => updateEntry(index, 'nama_kursus', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Penganjur</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.penganjur} onChange={(e) => updateEntry(index, 'penganjur', e.target.value)} /></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tempat</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.tempat} onChange={(e) => updateEntry(index, 'tempat', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.tarikh_mula} onChange={(e) => updateEntry(index, 'tarikh_mula', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.tarikh_tamat} onChange={(e) => updateEntry(index, 'tarikh_tamat', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-bold text-indigo-600" value={item.jumlah_jam} onChange={(e) => updateEntry(index, 'jumlah_jam', e.target.value)} /></div>
           </div>
         </div>
       );
@@ -372,10 +408,9 @@ export default function RekodKursusAdmin() {
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Penganjur</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.penganjur} onChange={(e) => updateEntry(index, 'penganjur', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tempat</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.tempat} onChange={(e) => updateEntry(index, 'tempat', e.target.value)} /></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Sesi</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.tarikh_mula} onChange={(e) => updateEntry(index, 'tarikh_mula', e.target.value)} /></div>
-            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Mula</label><input type="time" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.masa_mula} onChange={(e) => updateEntry(index, 'masa_mula', e.target.value)} /></div>
-            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Tamat</label><input type="time" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm" value={item.masa_tamat} onChange={(e) => updateEntry(index, 'masa_tamat', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-bold text-indigo-600" value={item.jumlah_jam} onChange={(e) => updateEntry(index, 'jumlah_jam', e.target.value)} /></div>
           </div>
         </div>
       );
@@ -405,7 +440,7 @@ export default function RekodKursusAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8 print:p-0 print:bg-white">
+    <div className="min-h-screen bg-slate-50 p-8 print:p-0 print:bg-white relative">
       {/* ========================================================
         CSS CETAKAN PROFESIONAL & KEBAL (PRINT CSS) 
         ======================================================== */}
@@ -447,7 +482,7 @@ export default function RekodKursusAdmin() {
             display: none !important;
           }
           /* Paksa border jadual keluar dalam cetakan */
-          table { border-collapse: collapse !important; width: 100% !important; }
+          table { border-collapse: collapse !important; width: 100% !important; position: relative; z-index: 10; }
           th, td { padding: 12px !important; }
         }
       `}} />
@@ -832,12 +867,12 @@ export default function RekodKursusAdmin() {
                   {editFormData.jenis_khusus !== "AI Untuk Rakyat" && editFormData.kategori_utama !== "3. Pembelajaran Kendiri" && (
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label>
-                      <input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.tarikh_mula} onChange={(e) => setEditFormData({...editFormData, tarikh_mula: e.target.value})} />
+                      <input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.tarikh_mula} onChange={(e) => handleEditDateChange('tarikh_mula', e.target.value)} />
                     </div>
                   )}
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat / Selesai</label>
-                    <input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.tarikh_tamat} onChange={(e) => setEditFormData({...editFormData, tarikh_tamat: e.target.value})} />
+                    <input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.tarikh_tamat} onChange={(e) => handleEditDateChange('tarikh_tamat', e.target.value)} />
                   </div>
                   {editFormData.kategori_utama !== "3. Pembelajaran Kendiri" && (
                     <>
@@ -854,7 +889,7 @@ export default function RekodKursusAdmin() {
                   {editFormData.jenis_khusus !== "AI Untuk Rakyat" && (
                     <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label>
-                      <input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm" value={editFormData.jumlah_jam} onChange={(e) => setEditFormData({...editFormData, jumlah_jam: e.target.value})} />
+                      <input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm font-bold text-indigo-600" value={editFormData.jumlah_jam} onChange={(e) => setEditFormData({...editFormData, jumlah_jam: e.target.value})} />
                     </div>
                   )}
                 </div>
@@ -945,10 +980,20 @@ export default function RekodKursusAdmin() {
       {/* 2. PAPARAN KHAS CETAKAN (HANYA MUNCUL SEMASA PRINT DI BUAT - REKA BENTUK CANTIK)    */}
       {/* =================================================================================== */}
       {isPantauanModalOpen && (
-        <div id="print-area" className="hidden print:block w-full bg-white text-black p-8">
+        <div id="print-area" className="hidden print:block w-full bg-transparent text-black p-8 relative z-0">
           
+          {/* WATERMARK LOGO JABATAN IMIGRESEN */}
+          <div className="fixed inset-0 flex items-center justify-center pointer-events-none -z-10">
+             <img 
+               src="/logo-imigresen.jpg" 
+               alt="Watermark Imigresen" 
+               className="w-[500px] opacity-[0.08]" 
+               style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+             />
+          </div>
+
           {/* Header Surat Cetakan */}
-          <div className="text-center mb-8 border-b-2 border-slate-300 pb-6">
+          <div className="text-center mb-8 border-b-2 border-slate-300 pb-6 relative z-10">
             <h2 className={`text-2xl font-black uppercase tracking-widest ${pantauanJenis === 'kurang' ? 'text-orange-600' : 'text-emerald-600'}`}>
               {pantauanJenis === 'kurang' ? `Senarai Pegawai Belum Mencapai 40 Jam` : `Senarai Pegawai Telah Mencapai 40 Jam`}
             </h2>
@@ -957,9 +1002,9 @@ export default function RekodKursusAdmin() {
           </div>
           
           {/* Jadual Cetakan Yang Cantik */}
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-left text-sm border-collapse relative z-10">
             <thead>
-              <tr className="bg-slate-100 border-b-2 border-slate-300">
+              <tr className="bg-slate-100 print:bg-transparent border-b-2 border-slate-300">
                 <th className="py-4 px-4 font-bold text-center w-12 text-slate-700">Bil.</th>
                 <th className="py-4 px-4 font-bold text-slate-700">Nama Pegawai</th>
                 <th className="py-4 px-4 font-bold w-32 text-slate-700">Gred</th>
@@ -980,8 +1025,8 @@ export default function RekodKursusAdmin() {
                     <td className="py-4 px-4 font-semibold text-gray-700">{pegawai.gred || '-'}</td>
                     <td className="py-4 px-4 text-xs font-semibold text-gray-600 uppercase">{pegawai.jabatan_bahagian || '-'}</td>
                     <td className="py-4 px-4 text-center">
-                      <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-black border shadow-sm ${
-                        pantauanJenis === 'kurang' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-black border shadow-sm print:border-none print:shadow-none print:p-0 ${
+                        pantauanJenis === 'kurang' ? 'bg-orange-50 text-orange-700 border-orange-200 print:bg-transparent print:text-gray-800' : 'bg-emerald-50 text-emerald-700 border-emerald-200 print:bg-transparent print:text-gray-800'
                       }`}>
                         {pegawai.jumlah_jam.toFixed(1)} Jam
                       </span>
@@ -992,7 +1037,7 @@ export default function RekodKursusAdmin() {
             </tbody>
           </table>
           
-          <div className="mt-10 text-center text-xs text-gray-500 italic">
+          <div className="mt-10 text-center text-xs text-gray-500 italic relative z-10">
             Dicetak oleh Sistem e-Pegawai pada: {new Date().toLocaleString('ms-MY')}
           </div>
         </div>

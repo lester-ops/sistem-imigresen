@@ -115,6 +115,24 @@ export default function RekodKursusBahagian() {
     setIsEditModalOpen(true);
   };
 
+  const handleEditDateChange = (field: string, value: string) => {
+    setEditFormData((prev: any) => {
+      const updated = { ...prev, [field]: value };
+      // Auto-kira jam untuk Kursus / Latihan (1 Hari = 6 Jam)
+      if (updated.kategori_utama === "1. Kursus / Latihan" && updated.tarikh_mula && updated.tarikh_tamat) {
+        const dMula = new Date(updated.tarikh_mula); 
+        const dTamat = new Date(updated.tarikh_tamat);
+        if (dTamat >= dMula) {
+          const days = Math.round((dTamat.getTime() - dMula.getTime()) / (1000 * 3600 * 24)) + 1;
+          updated.jumlah_jam = (days * 6).toString();
+        } else {
+          updated.jumlah_jam = "0";
+        }
+      }
+      return updated;
+    });
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -221,6 +239,23 @@ export default function RekodKursusBahagian() {
     const salinan = [...entries];
     salinan[index] = { ...salinan[index], [field]: value };
     if (field === 'kategori_utama') salinan[index].jenis_khusus = ""; 
+
+    // Auto-kira jam untuk Kursus / Latihan (1 Hari = 6 Jam)
+    if (salinan[index].kategori_utama === "1. Kursus / Latihan") {
+      const mula = salinan[index].tarikh_mula;
+      const tamat = salinan[index].tarikh_tamat;
+      if (mula && tamat) {
+        const dMula = new Date(mula);
+        const dTamat = new Date(tamat);
+        if (dTamat >= dMula) {
+          const days = Math.round((dTamat.getTime() - dMula.getTime()) / (1000 * 3600 * 24)) + 1;
+          salinan[index].jumlah_jam = (days * 6).toString();
+        } else {
+          salinan[index].jumlah_jam = "0";
+        }
+      }
+    }
+
     setEntries(salinan);
   };
 
@@ -295,10 +330,26 @@ export default function RekodKursusBahagian() {
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Nama Kursus / Latihan</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.nama_kursus} onChange={(e) => updateEntry(index, 'nama_kursus', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Penganjur</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.penganjur} onChange={(e) => updateEntry(index, 'penganjur', e.target.value)} /></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tempat</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.tempat} onChange={(e) => updateEntry(index, 'tempat', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.tarikh_mula} onChange={(e) => updateEntry(index, 'tarikh_mula', e.target.value)} /></div>
             <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.tarikh_tamat} onChange={(e) => updateEntry(index, 'tarikh_tamat', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-bold text-teal-700 focus:ring-teal-500" value={item.jumlah_jam} onChange={(e) => updateEntry(index, 'jumlah_jam', e.target.value)} /></div>
+          </div>
+        </div>
+      );
+    }
+    if (item.kategori_utama === "2. Sesi Pembelajaran") {
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tajuk Sesi</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.nama_kursus} onChange={(e) => updateEntry(index, 'nama_kursus', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Penganjur</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.penganjur} onChange={(e) => updateEntry(index, 'penganjur', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tempat</label><input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.tempat} onChange={(e) => updateEntry(index, 'tempat', e.target.value)} /></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Sesi</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-teal-500" value={item.tarikh_mula} onChange={(e) => updateEntry(index, 'tarikh_mula', e.target.value)} /></div>
+            <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-sm font-bold text-teal-700 focus:ring-teal-500" value={item.jumlah_jam} onChange={(e) => updateEntry(index, 'jumlah_jam', e.target.value)} /></div>
           </div>
         </div>
       );
@@ -592,17 +643,11 @@ export default function RekodKursusBahagian() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {editFormData.jenis_khusus !== "AI Untuk Rakyat" && editFormData.kategori_utama !== "3. Pembelajaran Kendiri" && (
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.tarikh_mula} onChange={(e) => setEditFormData({...editFormData, tarikh_mula: e.target.value})} /></div>
+                    <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Mula</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.tarikh_mula} onChange={(e) => handleEditDateChange('tarikh_mula', e.target.value)} /></div>
                   )}
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.tarikh_tamat} onChange={(e) => setEditFormData({...editFormData, tarikh_tamat: e.target.value})} /></div>
-                  {editFormData.kategori_utama !== "3. Pembelajaran Kendiri" && (
-                    <>
-                      <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Mula</label><input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.masa_mula} onChange={(e) => setEditFormData({...editFormData, masa_mula: e.target.value})} /></div>
-                      <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Masa Tamat</label><input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.masa_tamat} onChange={(e) => setEditFormData({...editFormData, masa_tamat: e.target.value})} /></div>
-                    </>
-                  )}
+                  <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tarikh Tamat</label><input type="date" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.tarikh_tamat} onChange={(e) => handleEditDateChange('tarikh_tamat', e.target.value)} /></div>
                   {editFormData.jenis_khusus !== "AI Untuk Rakyat" && (
-                    <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm" value={editFormData.jumlah_jam} onChange={(e) => setEditFormData({...editFormData, jumlah_jam: e.target.value})} /></div>
+                    <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Jumlah Jam</label><input type="number" step="0.5" required className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 bg-white text-sm font-bold text-teal-700 focus:ring-teal-500" value={editFormData.jumlah_jam} onChange={(e) => setEditFormData({...editFormData, jumlah_jam: e.target.value})} /></div>
                   )}
                 </div>
               </form>
