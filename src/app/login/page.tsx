@@ -160,7 +160,7 @@ export default function Login() {
             disabled={loading || loadingUsers}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-lg transition duration-200 shadow-md disabled:bg-slate-400 mt-2"
           >
-            {loading ? "Sedang disahkan..." : "Log Masuk Penuh"}
+            {loading ? "Sedang disahkan.." : "Log Masuk Penuh"}
           </button>
         </form>
       </div>
