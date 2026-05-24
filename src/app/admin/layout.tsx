@@ -58,7 +58,13 @@ export default function AdminLayout({
     const sahkan = confirm("Adakah anda pasti untuk log keluar?");
     if (sahkan) {
       localStorage.clear();
-      router.push("/login");
+      
+      // Buang (Clear) Cookie dengan meletakkan tarikh luput ke masa lalu
+      document.cookie = "userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "username=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      
+      // KEMAS KINI: Hantar terus ke Laman Utama (Homepage)
+      router.push("/");
     }
   };
 
@@ -79,13 +85,11 @@ export default function AdminLayout({
           ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full overflow-hidden'} 
           ${isMobile ? 'fixed' : 'relative'} top-0 left-0`}
       >
-        {/* Inner div dengan width kekal 64 supaya tulisan tak berterabur masa animasi 'tutup' */}
         <div className="w-64 flex flex-col h-full">
           
           <div className="p-6 text-center border-b border-emerald-800 relative">
             <h2 className="text-2xl font-bold tracking-wider text-emerald-300">e-PEGAWAI</h2>
             <p className="text-xs text-emerald-100 mt-2">Modul Pentadbir</p>
-            {/* Butang tutup (X) khas untuk mobile sahaja */}
             <button 
               className="md:hidden absolute right-4 top-6 text-emerald-300 hover:text-white text-2xl font-bold" 
               onClick={() => setIsSidebarOpen(false)}
@@ -140,7 +144,6 @@ export default function AdminLayout({
         {/* UNIVERSAL TOP HEADER */}
         <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex items-center justify-between print:hidden z-20 relative">
           <div className="flex items-center">
-            {/* Butang Hamburger Toggle */}
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
               className="text-emerald-800 hover:text-emerald-600 text-2xl mr-5 focus:outline-none transition transform hover:scale-110"
@@ -155,8 +158,8 @@ export default function AdminLayout({
           </div>
         </header>
 
-        {/* CONTENT BACKGROUND LAYER (WATERMARK) */}
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden print:hidden">
+        {/* LOGO WATERMARK DIKEMBALIKAN */}
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden print:hidden select-none">
             <img 
               src="/logo-imigresen.jpg" 
               alt="Watermark Latar Belakang" 
@@ -164,7 +167,7 @@ export default function AdminLayout({
             />
         </div>
 
-        {/* CONTENT UTAMA (Di set kepada transparent supaya nampak watermark) */}
+        {/* CONTENT UTAMA */}
         <main className="flex-1 overflow-y-auto relative z-10 bg-transparent">
           {children}
         </main>

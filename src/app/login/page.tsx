@@ -72,6 +72,11 @@ export default function Login() {
         localStorage.setItem("username", data.username);
         localStorage.setItem("bahagianAkses", data.bahagian_akses || "");
 
+        // KOD BARU: Simpan ke HTTP Cookie supaya Middleware (Server) boleh baca
+        // Tetapkan masa luput (max-age) selama 86400 saat (1 hari)
+        document.cookie = `userRole=${data.role}; path=/; max-age=86400`;
+        document.cookie = `username=${data.username}; path=/; max-age=86400`;
+
         // Hantar user ke halaman yang betul berdasarkan Role
         if (data.role === "ADMIN") {
           router.push("/admin/dashboard");

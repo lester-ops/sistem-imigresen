@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-// Metadata ini sangat penting supaya Google mudah 'baca' dan 'jumpa' website ini
+// Metadata ini sangat penting supaya Google mudah 'baca' website ini
 export const metadata = {
-  title: 'Sistem Pengurusan Imigresen | Cuti & Kursus',
-  description: 'Portal rasmi Sistem Pengurusan e-Pegawai (Cuti & Kursus) untuk kegunaan kakitangan dan pentadbir jabatan.',
-  keywords: 'sistem imigresen, e-pegawai, sistem cuti, sistem kursus kakitangan',
+  title: 'Sistem Pengurusan Pegawai | Cuti & Kursus',
+  description: 'Portal rasmi Sistem Pengurusan Pegawai untuk pengurusan cuti dan kursus kakitangan.',
+  keywords: 'sistem pengurusan pegawai, e-pegawai, sistem cuti, sistem kursus kakitangan',
 };
 
 export default function Home() {
@@ -16,18 +16,18 @@ export default function Home() {
 
       <div className="bg-white p-10 rounded-2xl shadow-2xl max-w-lg w-full text-center relative z-10 border border-slate-200">
         
-        {/* LOGO IMIGRESEN */}
+        {/* IKON SVG KORPORAT (Saiz sama seperti logo lama) */}
         <div className="flex justify-center mb-6">
-          <img 
-            src="/logo-imigresen.jpg" 
-            alt="Logo Jabatan Imigresen Malaysia" 
-            className="w-32 h-32 object-contain drop-shadow-sm" 
-          />
+          <div className="w-28 h-28 bg-emerald-50 rounded-full flex items-center justify-center border-4 border-emerald-100 shadow-sm text-emerald-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-14 h-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
         </div>
         
-        {/* TAJUK SISTEM UNTUK SEO */}
+        {/* TAJUK SISTEM UNTUK SEO & UMUM */}
         <h1 className="text-3xl sm:text-4xl font-black text-slate-800 mb-2 tracking-tight">
-          Sistem Pengurusan Imigresen
+          Sistem Pengurusan Pegawai
         </h1>
         <h2 className="text-emerald-700 font-bold text-sm sm:text-base uppercase tracking-widest mb-8">
           Modul e-Pegawai (Cuti & Kursus)
@@ -49,7 +49,7 @@ export default function Home() {
         </Link>
         
         <div className="mt-8 text-xs text-slate-400 font-semibold">
-          &copy; {new Date().getFullYear()} Hak Cipta Terpelihara.
+          &copy; {new Date().getFullYear()} Hak Cipta Terpelihara. Penggunaan Dalaman Sahaja.
         </div>
       </div>
       
