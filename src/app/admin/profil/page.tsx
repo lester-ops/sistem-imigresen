@@ -61,7 +61,9 @@ export default function ProfilAdmin() {
       if (authError) throw authError;
 
       // 2. Kemas kini di jadual pengguna_sistem supaya Admin lain boleh nampak jika perlu Reset
-      const emelRasmi = `${profil.username.toLowerCase().replace(/[^a-z0-9]/g, '')}@sistem.local`;
+      const emelRasmi = profil.role === 'ADMIN' && profil.email 
+        ? profil.email 
+        : `${profil.username.toLowerCase().replace(/[^a-z0-9]/g, '')}@sistem.local`;
       
       const payload = {
         action: 'UPDATE',

@@ -24,7 +24,6 @@ export async function POST(request: Request) {
 
       const { error: dbError } = await supabaseAdmin.from('pengguna_sistem').insert([{
         username: username,
-        password: password,
         role: role,
         bahagian_akses: bahagian_akses,
         email: email // Menyimpan emel sebenar/tiruan ke database
@@ -43,7 +42,6 @@ export async function POST(request: Request) {
     if (action === 'UPDATE') {
       const { error: dbError } = await supabaseAdmin.from('pengguna_sistem').update({
         username: username,
-        password: password,
         role: role,
         bahagian_akses: bahagian_akses,
         email: email // Kemas kini emel di database

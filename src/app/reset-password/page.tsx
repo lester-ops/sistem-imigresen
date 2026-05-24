@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
@@ -12,6 +12,16 @@ export default function ResetPassword() {
   const [errorMsg, setErrorMsg] = useState("");
   
   const router = useRouter();
+
+  // KOD BARU: Cuci sesi lama secara paksa sebaik sahaja halaman dibuka
+  useEffect(() => {
+    // 1. Buang maklumat dari Local Storage
+    localStorage.clear();
+    
+    // 2. Buang maklumat Cookies (Letakkan tarikh luput ke masa lalu) supaya Middleware tidak menendang ke Dashboard
+    document.cookie = "userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    document.cookie = "username=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  }, []);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,10 +42,39 @@ export default function ResetPassword() {
     }
 
     try {
-      // Supabase secara automatik mengesan sesi dari URL Fragment (hash) yang dihantar ke emel
-      const { error } = await supabase.auth.updateUser({ password });
+      // Supabase menggunakan sesi automatik (Recovery Token dari emel) untuk proses ini
+      const { data: authData, error } = await supabase.auth.updateUser({ password });
       
       if (error) throw error;
+      
+      // KOD BARU: Segerakkan kata laluan ke dalam jadual pengguna_sistem supaya rekod kekal 'up-to-date'
+      if (authData?.user?.email) {
+         const { data: dbUser } = await supabase
+           .from("pengguna_sistem")
+           .select("*")
+           .eq("email", authData.user.email)
+           .single();
+
+         if (dbUser) {
+            const payload = {
+              action: 'UPDATE',
+              email: dbUser.email,
+              password: password,
+              username: dbUser.username,
+              role: dbUser.role,
+              bahagian_akses: dbUser.bahagian_akses,
+              uid: dbUser.id
+            };
+            await fetch('/api/pengguna', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+         }
+      }
+
+      // Selepas berjaya, Log Keluar Supabase sepenuhnya supaya pengguna terpaksa log masuk dengan password baru
+      await supabase.auth.signOut();
       
       setMessage("Tahniah! Kata laluan anda berjaya dikemas kini. Sila tunggu, anda akan dibawa ke Log Masuk...");
       
