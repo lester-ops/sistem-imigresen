@@ -13,10 +13,11 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [username, setUsername] = useState("");
   
-  // State untuk kawalan Sidebar (Menu) di skrin kecil/mobile
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // State untuk kawalan Sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Semak jika user betul-betul dah log masuk bila halaman dibuka
+  // Semak akses pengguna
   useEffect(() => {
     const role = localStorage.getItem("userRole");
     const nama = localStorage.getItem("username");
@@ -29,101 +30,142 @@ export default function AdminLayout({
     }
   }, [router]);
 
-  // Tutup menu secara automatik apabila pengguna klik pautan di mobile
+  // Kesan saiz skrin untuk auto-tutup sidebar di telefon pintar
   useEffect(() => {
-    setIsMobileMenuOpen(false);
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsSidebarOpen(false);
+        setIsMobile(true);
+      } else {
+        setIsSidebarOpen(true);
+        setIsMobile(false);
+      }
+    };
+    
+    handleResize(); // Jalankan sekali masa mula-mula load
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Tutup menu secara automatik apabila pengguna telefon klik pada menu
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
   }, [pathname]);
 
   const handleLogout = () => {
     const sahkan = confirm("Adakah anda pasti untuk log keluar?");
     if (sahkan) {
-      localStorage.clear(); // Buang memori log masuk
-      router.push("/login"); // Hantar balik ke login
+      localStorage.clear();
+      router.push("/login");
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
       
       {/* Overlay hitam lutsinar untuk mobile bila menu dibuka */}
-      {isMobileMenuOpen && (
+      {isSidebarOpen && isMobile && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden print:hidden" 
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* SIDEBAR MENU (KIRI) */}
-      {/* Akan disembunyikan ke tepi (-translate-x-full) pada mobile jika isMobileMenuOpen = false */}
-      <aside className={`w-64 bg-slate-800 text-white flex flex-col shadow-xl fixed inset-y-0 left-0 z-50 transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0 transition duration-200 ease-in-out print:hidden`}>
-        <div className="p-6 text-center border-b border-slate-700 flex justify-between items-center md:block">
-          <div>
-            <h2 className="text-2xl font-bold tracking-wider text-blue-400">e-PEGAWAI</h2>
-            <p className="text-xs text-slate-400 mt-2">Modul Pentadbir</p>
+      {/* SIDEBAR MENU (KIRI) - TEMA HIJAU (EMERALD/TEAL) */}
+      <aside 
+        className={`flex-shrink-0 bg-emerald-900 text-white h-full transition-all duration-300 ease-in-out z-50 shadow-2xl print:hidden
+          ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full overflow-hidden'} 
+          ${isMobile ? 'fixed' : 'relative'} top-0 left-0`}
+      >
+        {/* Inner div dengan width kekal 64 supaya tulisan tak berterabur masa animasi 'tutup' */}
+        <div className="w-64 flex flex-col h-full">
+          
+          <div className="p-6 text-center border-b border-emerald-800 relative">
+            <h2 className="text-2xl font-bold tracking-wider text-emerald-300">e-PEGAWAI</h2>
+            <p className="text-xs text-emerald-100 mt-2">Modul Pentadbir</p>
+            {/* Butang tutup (X) khas untuk mobile sahaja */}
+            <button 
+              className="md:hidden absolute right-4 top-6 text-emerald-300 hover:text-white text-2xl font-bold" 
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              &times;
+            </button>
           </div>
-          {/* Butang pangkah (X) untuk tutup menu di mobile */}
-          <button className="md:hidden text-slate-400 hover:text-white text-2xl" onClick={() => setIsMobileMenuOpen(false)}>&times;</button>
-        </div>
 
-        <div className="p-4 bg-slate-900 border-b border-slate-700 text-sm">
-          Selamat datang, <br/><span className="font-semibold text-blue-300">@{username}</span>
-        </div>
+          <div className="p-4 bg-emerald-950 border-b border-emerald-800 text-sm">
+            Selamat datang, <br/><span className="font-semibold text-emerald-200">@{username}</span>
+          </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          <Link href="/admin/dashboard" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/dashboard' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            📊 Dashboard
-          </Link>
-          <Link href="/admin/urus-pegawai" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/urus-pegawai' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            👥 Senarai Pegawai
-          </Link>
-          <Link href="/admin/kursus" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/kursus' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            🎓 Rekod Kursus
-          </Link>
-          
-          <Link href="/admin/cuti" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            🏖️ Rekod Cuti
-          </Link>
-          
-          <Link href="/admin/cuti/baki" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti/baki' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            🧮 Baki Cuti
-          </Link>
+          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <Link href="/admin/dashboard" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/dashboard' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              📊 Dashboard
+            </Link>
+            <Link href="/admin/urus-pegawai" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/urus-pegawai' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              👥 Senarai Pegawai
+            </Link>
+            <Link href="/admin/kursus" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/kursus' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              🎓 Rekod Kursus
+            </Link>
+            <Link href="/admin/cuti" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              🏖️ Rekod Cuti
+            </Link>
+            <Link href="/admin/cuti/baki" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti/baki' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              🧮 Baki Cuti
+            </Link>
+            <Link href="/admin/cuti/tetapan" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti/tetapan' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              🗓️ Tetapan Cuti Umum
+            </Link>
+            <Link href="/admin/laporan-individu" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/laporan-individu' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              🖨️ Laporan Pegawai
+            </Link>
+            <Link href="/admin/urus-pengguna" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/urus-pengguna' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              ⚙️ Urus Pengguna (User)
+            </Link>
+          </nav>
 
-          <Link href="/admin/cuti/tetapan" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/cuti/tetapan' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            🗓️ Tetapan Cuti Umum
-          </Link>
+          <div className="p-4 border-t border-emerald-800">
+            <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white py-2.5 px-4 rounded-lg transition shadow-md font-bold">
+              <span>Log Keluar</span>
+            </button>
+          </div>
 
-          <Link href="/admin/laporan-individu" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/laporan-individu' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            🖨️ Laporan Pegawai
-          </Link>
-
-          <Link href="/admin/urus-pengguna" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/urus-pengguna' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}>
-            ⚙️ Urus Pengguna (User)
-          </Link>
-        </nav>
-
-        <div className="p-4 border-t border-slate-700">
-          <button onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded transition">
-            <span>Log Keluar</span>
-          </button>
         </div>
       </aside>
 
       {/* RUANGAN KANDUNGAN UTAMA (KANAN) */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-0">
         
-        {/* HEADER MUDAH ALIH (Hanya papar pada skrin kecil) */}
-        <header className="bg-white shadow-sm border-b px-6 py-4 flex items-center justify-between md:hidden print:hidden">
-          <div className="font-bold text-slate-800 text-lg">e-PEGAWAI</div>
-          <button 
-            onClick={() => setIsMobileMenuOpen(true)} 
-            className="text-slate-600 hover:text-slate-900 text-2xl focus:outline-none"
-          >
-            ☰
-          </button>
+        {/* UNIVERSAL TOP HEADER */}
+        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex items-center justify-between print:hidden z-20 relative">
+          <div className="flex items-center">
+            {/* Butang Hamburger Toggle */}
+            <button 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+              className="text-emerald-800 hover:text-emerald-600 text-2xl mr-5 focus:outline-none transition transform hover:scale-110"
+              title="Tutup/Buka Menu"
+            >
+              ☰
+            </button>
+            <div className="font-black text-emerald-900 text-lg tracking-wide hidden sm:block uppercase">SISTEM e-PEGAWAI</div>
+          </div>
+          <div className="text-xs font-extrabold text-emerald-800 bg-emerald-50 px-4 py-1.5 rounded-lg border border-emerald-200 shadow-sm tracking-wide">
+            MODUL PENTADBIR
+          </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-gray-50">
-          {/* 'children' di bawah ini adalah tempat di mana page.tsx akan dipaparkan */}
+        {/* CONTENT BACKGROUND LAYER (WATERMARK) */}
+        <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden print:hidden">
+            <img 
+              src="/logo-imigresen.jpg" 
+              alt="Watermark Latar Belakang" 
+              className="w-[300px] md:w-[450px] opacity-[0.05]" 
+            />
+        </div>
+
+        {/* CONTENT UTAMA (Di set kepada transparent supaya nampak watermark) */}
+        <main className="flex-1 overflow-y-auto relative z-10 bg-transparent">
           {children}
         </main>
 
