@@ -127,6 +127,9 @@ export default function AdminLayout({
             <Link href="/admin/urus-pengguna" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/urus-pengguna' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
               ⚙️ Urus Pengguna (User)
             </Link>
+            <Link href="/admin/profil" className={`block px-4 py-3 rounded-lg transition ${pathname === '/admin/profil' ? 'bg-emerald-700 text-white shadow-md' : 'text-emerald-100 hover:bg-emerald-800 hover:text-white'}`}>
+              👤 Profil Saya
+            </Link>
           </nav>
 
           <div className="p-4 border-t border-emerald-800">

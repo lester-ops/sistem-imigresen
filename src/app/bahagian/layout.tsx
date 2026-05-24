@@ -120,6 +120,12 @@ export default function BahagianLayout({
             >
               🏖️ Rekod Cuti
             </Link>
+            <Link 
+              href="/bahagian/profil" 
+              className={`block px-4 py-3 rounded-lg transition ${pathname === '/bahagian/profil' ? 'bg-teal-700 text-white shadow-md' : 'text-teal-100 hover:bg-teal-800 hover:text-white'}`}
+            >
+              👤 Profil Saya
+            </Link>
           </nav>
 
           <div className="p-4 border-t border-teal-800">

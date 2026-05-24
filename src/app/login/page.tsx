@@ -16,13 +16,12 @@ export default function Login() {
   
   const router = useRouter(); 
 
-  // Ambil senarai ID pengguna sebaik sahaja laman dibuka (Untuk Dropdown)
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const { data, error } = await supabase
           .from("pengguna_sistem")
-          .select("username, role, bahagian_akses")
+          .select("username, role, bahagian_akses, email")
           .order("role", { ascending: true })
           .order("username", { ascending: true });
 
@@ -50,53 +49,46 @@ export default function Login() {
         return;
       }
 
-      // 1. FORMAT KEPADA EMEL TIRUAN UNTUK SUPABASE AUTH
-      const emelRasmi = `${username.toLowerCase()}@sistem.local`;
+      // Cari profil pengguna dari senarai dropdown
+      const selectedUser = senaraiPengguna.find(u => u.username === username);
+      if (!selectedUser) throw new Error("Pengguna tidak dijumpai.");
 
-      // 2. LOG MASUK MENGGUNAKAN SUPABASE AUTH (SISTEM KESELAMATAN RASMI)
+      // Jika Admin ada emel rasmi, guna emel itu. Jika tiada, guna emel tiruan.
+      let emelRasmi = "";
+      if (selectedUser.role === "ADMIN" && selectedUser.email) {
+        emelRasmi = selectedUser.email;
+      } else {
+        const cleanUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '');
+        emelRasmi = `${cleanUsername}@sistem.local`;
+      }
+
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: emelRasmi,
         password: password,
       });
 
       if (authError) {
-        console.error("Auth Error:", authError.message);
-        setErrorMsg("Kata laluan (Password) salah atau pengguna tidak didaftarkan di Auth!");
+        setErrorMsg("Kata laluan (Password) salah!");
         setLoading(false);
         return;
       }
 
-      // 3. JIKA BERJAYA (AUTHENTICATED), AMBIL PERANAN DARI JADUAL PENGGUNA
-      const { data: userData, error: userError } = await supabase
-        .from("pengguna_sistem")
-        .select("*")
-        .eq("username", username)
-        .single();
+      // SIMPAN SESI SEPERTI BIASA
+      localStorage.setItem("userRole", selectedUser.role);
+      localStorage.setItem("username", selectedUser.username);
+      localStorage.setItem("bahagianAkses", selectedUser.bahagian_akses || "");
 
-      if (userError || !userData) {
-        setErrorMsg("Profil pengguna tidak dijumpai di pangkalan data.");
-        setLoading(false);
-        return;
-      }
+      document.cookie = `userRole=${selectedUser.role}; path=/; max-age=86400`;
+      document.cookie = `username=${selectedUser.username}; path=/; max-age=86400`;
 
-      // 4. SIMPAN SESI SEPERTI BIASA
-      localStorage.setItem("userRole", userData.role);
-      localStorage.setItem("username", userData.username);
-      localStorage.setItem("bahagianAkses", userData.bahagian_akses || "");
-
-      document.cookie = `userRole=${userData.role}; path=/; max-age=86400`;
-      document.cookie = `username=${userData.username}; path=/; max-age=86400`;
-
-      // Hantar user ke halaman yang betul
-      if (userData.role === "ADMIN") {
+      if (selectedUser.role === "ADMIN") {
         router.push("/admin/dashboard");
       } else {
         router.push("/bahagian/kursus");
       }
 
-    } catch (err) {
-      console.error("Ralat sistem:", err);
-      setErrorMsg("Berlaku ralat sistem. Sila cuba lagi.");
+    } catch (err: any) {
+      setErrorMsg("Berlaku ralat sistem: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -122,17 +114,16 @@ export default function Login() {
         )}
 
         <form onSubmit={handleLogin} className="space-y-6">
-          
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">ID Pengguna (Username)</label>
             {loadingUsers ? (
               <div className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 text-slate-500 text-sm italic">
-                Memuat turun senarai pengguna...
+                Memuat turun senarai...
               </div>
             ) : (
               <select
                 required
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white font-bold text-emerald-900 shadow-sm cursor-pointer"
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white font-bold text-emerald-900 shadow-sm cursor-pointer uppercase"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               >
@@ -147,7 +138,13 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Kata Laluan</label>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">Kata Laluan</label>
+              {/* PAUTAN LUPA KATA LALUAN UNTUK ADMIN */}
+              <Link href="/lupa-kata-laluan" className="text-xs font-bold text-emerald-600 hover:text-emerald-800 transition hover:underline">
+                Lupa Kata Laluan Admin?
+              </Link>
+            </div>
             <input
               type="password"
               required
@@ -163,10 +160,9 @@ export default function Login() {
             disabled={loading || loadingUsers}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-lg transition duration-200 shadow-md disabled:bg-slate-400 mt-2"
           >
-            {loading ? "Sedang disahkan (Secured)..." : "Log Masuk Penuh"}
+            {loading ? "Sedang disahkan..." : "Log Masuk Penuh"}
           </button>
         </form>
-
       </div>
     </div>
   );
