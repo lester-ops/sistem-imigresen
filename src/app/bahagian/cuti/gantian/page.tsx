@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function SejarahCutiGantian() {
+export default function SejarahCutiGantianBahagian() {
   const [mounted, setMounted] = useState(false);
   const [senaraiSejarah, setSenaraiSejarah] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [carian, setCarian] = useState("");
   const [tahunDipilih, setTahunDipilih] = useState(new Date().getFullYear().toString());
+  const [bahagianAkses, setBahagianAkses] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -26,21 +27,23 @@ export default function SejarahCutiGantian() {
   const janaBarisGantianKosong = () => ({ ic_pegawai: "", jumlah_jam: "" });
   const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
 
-  const dapatkanPilihanPegawai = async () => {
-    const { data } = await supabase.from("pegawai").select("ic, nama, jabatan_bahagian").order("nama");
+  const dapatkanPilihanPegawai = async (bahagian: string) => {
+    const { data } = await supabase.from("pegawai").select("ic, nama, jabatan_bahagian").eq("jabatan_bahagian", bahagian).order("nama");
     if (data) setPilihanPegawai(data);
   };
 
-  const dapatkanSejarah = useCallback(async () => {
+  const dapatkanSejarah = useCallback(async (bahagian: string) => {
     setLoading(true);
     try {
+      // Menapis rekod dengan hanya memaparkan pegawai dari bahagian kerani yang log masuk
       const { data, error } = await supabase
         .from("cuti_gantian_tambah")
         .select(`
           id, ic_pegawai, bulan, tahun, jumlah_jam, created_at,
-          pegawai ( nama, jabatan_bahagian )
+          pegawai!inner ( nama, jabatan_bahagian )
         `)
         .eq("tahun", tahunDipilih)
+        .eq("pegawai.jabatan_bahagian", bahagian)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -56,10 +59,19 @@ export default function SejarahCutiGantian() {
   }, [tahunDipilih]);
 
   useEffect(() => {
-    setMounted(true);
-    dapatkanSejarah();
-    dapatkanPilihanPegawai();
+    const bahagian = localStorage.getItem("bahagianAkses") || "";
+    setBahagianAkses(bahagian);
+    if (bahagian) {
+      dapatkanSejarah(bahagian);
+      dapatkanPilihanPegawai(bahagian);
+    } else {
+      setLoading(false);
+    }
   }, [dapatkanSejarah]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -69,8 +81,7 @@ export default function SejarahCutiGantian() {
     const kataKunci = carian.toLowerCase();
     const nama = rekod.pegawai?.nama?.toLowerCase() || "";
     const ic = rekod.ic_pegawai || "";
-    const bahagian = rekod.pegawai?.jabatan_bahagian?.toLowerCase() || "";
-    return nama.includes(kataKunci) || ic.includes(kataKunci) || bahagian.includes(kataKunci);
+    return nama.includes(kataKunci) || ic.includes(kataKunci);
   });
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -151,7 +162,7 @@ export default function SejarahCutiGantian() {
         if (errSejarah) throw errSejarah; // Tambahan logik tangkap ralat pangkalan data
       }
 
-      alert(`Berjaya! Rekod penambahan jam telah disimpan.`); setIsGantianModalOpen(false); resetBorangGantian(); dapatkanSejarah();
+      alert(`Berjaya! Rekod penambahan jam telah disimpan.`); setIsGantianModalOpen(false); resetBorangGantian(); dapatkanSejarah(bahagianAkses);
     } catch (err: any) { alert("Gagal merekod: " + err.message); } finally { setIsSubmittingGantian(false); }
   };
 
@@ -179,7 +190,7 @@ export default function SejarahCutiGantian() {
       }
 
       alert("Rekod berjaya dipadam dan baki telah dikemas kini.");
-      dapatkanSejarah();
+      dapatkanSejarah(bahagianAkses);
     } catch (err: any) {
       alert("Gagal memadam: " + err.message);
       setLoading(false);
@@ -187,47 +198,15 @@ export default function SejarahCutiGantian() {
   };
 
   return (
-    <div className="p-4 sm:p-8 bg-transparent min-h-screen print:p-0 relative">
-      
-      {/* CSS KHAS UNTUK CETAKAN (PRINT) */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          @page { margin: 0.5cm; }
-          body, html { 
-            background-color: white !important;
-            -webkit-print-color-adjust: exact !important; 
-            print-color-adjust: exact !important; 
-            height: auto !important;
-          }
-          .h-screen, .min-h-screen, .max-h-screen, .h-full {
-            height: auto !important; min-height: 0 !important; max-height: none !important;
-          }
-          .overflow-y-auto, .overflow-hidden, .overflow-x-auto {
-            overflow: visible !important; max-height: none !important;
-          }
-          aside, nav { display: none !important; }
-          main {
-            flex: none !important; width: 100% !important; overflow: visible !important;
-            margin: 0 !important; padding: 0 !important;
-          }
-          .print-hide { display: none !important; }
-          table { border-collapse: collapse !important; width: 100% !important; table-layout: auto; position: relative; z-index: 10; }
-          th, td { padding: 8px !important; border: 1px solid #cbd5e1 !important; }
-          thead th { background-color: transparent !important; color: #1e293b !important; white-space: normal !important; }
-        }
-      `}} />
-
-      <div className="max-w-7xl mx-auto print-hide">
+    <div className="p-4 sm:p-8 bg-transparent min-h-screen">
+      <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
           <div>
             <h1 className="text-3xl font-bold text-orange-900">Rekod Cuti Gantian</h1>
-            <p className="text-orange-700 text-sm mt-1 font-medium">Buku log (Resit) rekod kemasukan jam kerja lebih masa kakitangan</p>
+            <p className="text-orange-700 text-sm mt-1 font-medium">Buku log resit kemasukan jam untuk unit {bahagianAkses || '-'}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow-sm border border-orange-200">
-            <button onClick={() => window.print()} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
-              <span className="mr-2">🖨️</span> Cetak PDF
-            </button>
-            <button onClick={() => setIsGantianModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
+            <button onClick={() => setIsGantianModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
               <span className="mr-2">⏱️</span> Tambah Jam
             </button>
             <div className="flex items-center space-x-2 border-l border-orange-200 pl-3">
@@ -266,13 +245,13 @@ export default function SejarahCutiGantian() {
             ) : (
               <table className="w-full text-left border-collapse whitespace-nowrap text-sm">
                 <thead>
-                  <tr className="bg-orange-600 text-white">
-                    <th className="p-4 font-semibold text-center w-12 sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700">Bil.</th>
-                    <th className="p-4 font-semibold sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700">Nama Pegawai & Bahagian</th>
-                    <th className="p-4 font-semibold text-center w-32 sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700 text-orange-100">Untuk Bulan</th>
-                    <th className="p-4 font-semibold text-center w-40 sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700 text-yellow-200">Jam Ditambah</th>
-                    <th className="p-4 font-semibold text-center w-48 sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700">Waktu Direkodkan</th>
-                    <th className="p-4 font-semibold text-center w-24 sticky top-0 bg-orange-600 z-10 shadow-sm border-b border-orange-700">Tindakan</th>
+                  <tr className="bg-orange-500 text-white">
+                    <th className="p-4 font-semibold text-center w-12 sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600">Bil.</th>
+                    <th className="p-4 font-semibold sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600">Nama Pegawai & Bahagian</th>
+                    <th className="p-4 font-semibold text-center w-32 sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600 text-orange-100">Untuk Bulan</th>
+                    <th className="p-4 font-semibold text-center w-40 sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600 text-yellow-200">Jam Ditambah</th>
+                    <th className="p-4 font-semibold text-center w-48 sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600">Waktu Direkodkan</th>
+                    <th className="p-4 font-semibold text-center w-24 sticky top-0 bg-orange-500 z-10 shadow-sm border-b border-orange-600">Tindakan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-50">
@@ -327,83 +306,14 @@ export default function SejarahCutiGantian() {
         </div>
       </div>
 
-      {/* =================================================================================== */}
-      {/* PAPARAN CETAKAN KHAS (HANYA KELIHATAN WAKTU PRINT) DENGAN WATERMARK LOGO            */}
-      {/* =================================================================================== */}
-      <div className="hidden print:block w-full bg-transparent text-black p-8 relative z-0">
-        
-        {/* WATERMARK LOGO JABATAN IMIGRESEN */}
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none -z-10">
-           <img 
-             src="/logo-imigresen.jpg" 
-             alt="Watermark Imigresen" 
-             className="w-[500px] opacity-[0.08]" 
-             style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
-           />
-        </div>
-
-        {/* Header Cetakan */}
-        <div className="text-center mb-6 border-b-2 border-slate-400 pb-6 relative z-10">
-          <h2 className="text-2xl font-black uppercase tracking-widest text-slate-800">
-            Buku Log (Resit) Penambahan Cuti Gantian
-          </h2>
-          <p className="font-bold mt-2 text-lg text-slate-600">Sistem Pengurusan e-Pegawai Imigresen</p>
-          <p className="font-semibold mt-1 text-slate-500 uppercase">Tahun {tahunDipilih}</p>
-          <p className="font-semibold mt-1 text-slate-500">Jumlah Rekod: {sejarahDitapis.length} Penambahan Jam</p>
-        </div>
-        
-        {/* Jadual Cetakan */}
-        <table className="w-full text-left text-[12px] border-collapse relative z-10 bg-transparent">
-          <thead>
-            <tr className="bg-transparent border-y-2 border-slate-400 text-slate-800 leading-tight">
-              <th className="py-2 px-2 font-bold text-center w-8 border border-slate-300 align-middle">Bil.</th>
-              <th className="py-2 px-2 font-bold border border-slate-300 align-middle">Nama Pegawai & Bahagian</th>
-              <th className="py-2 px-2 font-bold text-center w-32 border border-slate-300 align-middle">Tuntutan Bulan</th>
-              <th className="py-2 px-2 font-bold text-center w-32 border border-slate-300 align-middle">Jam Ditambah</th>
-              <th className="py-2 px-2 font-bold text-center w-48 border border-slate-300 align-middle">Waktu Direkodkan</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-300 bg-transparent">
-            {sejarahDitapis.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center font-medium italic text-gray-500 border border-slate-300">Tiada rekod penambahan cuti gantian dijumpai.</td>
-              </tr>
-            ) : (
-              sejarahDitapis.map((rekod, index) => (
-                <tr key={rekod.id} className="break-inside-avoid">
-                  <td className="py-3 px-2 text-center text-gray-600 font-medium border border-slate-300 align-middle">{index + 1}</td>
-                  <td className="py-3 px-2 border border-slate-300 align-middle">
-                    <div className="font-bold text-slate-900 uppercase">{rekod.pegawai?.nama}</div>
-                    <div className="text-[10px] text-gray-500 font-semibold mt-1">{rekod.pegawai?.jabatan_bahagian}</div>
-                  </td>
-                  <td className="py-3 px-2 text-center font-bold text-slate-800 border border-slate-300 align-middle">
-                    {namaBulan(rekod.bulan)} {rekod.tahun}
-                  </td>
-                  <td className="py-3 px-2 text-center border border-slate-300 align-middle">
-                     <span className="font-black text-sm text-orange-800">+{rekod.jumlah_jam} Jam</span>
-                  </td>
-                  <td className="py-3 px-2 text-center text-xs font-semibold text-gray-600 border border-slate-300 align-middle">
-                    {formatTarikhDicipta(rekod.created_at)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        
-        <div className="mt-8 text-center text-xs text-gray-500 italic relative z-10">
-          Dicetak oleh Sistem e-Pegawai pada: {new Date().toLocaleString('ms-MY')}
-        </div>
-      </div>
-
       {/* POPUP MODAL PUKAL GANTIAN (PORTAL) */}
       {isGantianModalOpen && mounted && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[100] transition-opacity print-hide">
           <div className="bg-white shadow-2xl w-full w-[95%] max-w-5xl h-[90vh] flex flex-col rounded-2xl border border-orange-200 overflow-hidden transform scale-100 transition-transform">
-            <div className="p-6 bg-orange-600 flex justify-between items-center text-white shadow-sm">
+            <div className="p-6 bg-orange-500 flex justify-between items-center text-white shadow-sm">
               <div>
                 <h2 className="text-2xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian</h2>
-                <p className="text-xs text-orange-200 mt-1">Sistem akan merekod sejarah jam gantian ke dalam pangkalan data</p>
+                <p className="text-xs text-orange-100 mt-1">Sistem akan merekod sejarah jam gantian ke dalam pangkalan data</p>
               </div>
               <button onClick={() => setIsGantianModalOpen(false)} className="font-bold text-3xl hover:text-orange-200 transition outline-none">&times;</button>
             </div>
@@ -427,7 +337,7 @@ export default function SejarahCutiGantian() {
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-orange-100/50 border-b border-orange-200"><tr className="text-orange-900"><th className="p-4 w-16 text-center font-bold">#</th><th className="p-4 font-bold">Nama Pegawai & Bahagian</th><th className="p-4 w-48 text-center font-bold">Jam Diperoleh</th></tr></thead>
+                    <thead className="bg-orange-100/50 border-b border-orange-200"><tr className="text-orange-900"><th className="p-4 w-16 text-center font-bold">#</th><th className="p-4 font-bold">Nama Pegawai ({bahagianAkses})</th><th className="p-4 w-48 text-center font-bold">Jam Diperoleh</th></tr></thead>
                     <tbody className="divide-y divide-orange-50">
                       {gantianEntries.map((item, index) => (
                          <tr key={index} className="hover:bg-orange-50/50 transition">
@@ -443,7 +353,7 @@ export default function SejarahCutiGantian() {
             </div>
             <div className="p-5 border-t border-orange-100 bg-white flex justify-end space-x-3 shadow-md">
               <button type="button" onClick={() => setIsGantianModalOpen(false)} className="px-6 py-2.5 border border-orange-200 rounded-lg text-orange-800 font-bold hover:bg-orange-50 transition">Batal</button>
-              <button type="submit" form="bulkGantianForm" disabled={isSubmittingGantian} className="px-8 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold shadow-md transition disabled:bg-orange-400">Simpan Pukal</button>
+              <button type="submit" form="bulkGantianForm" disabled={isSubmittingGantian} className="px-8 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition disabled:bg-orange-400">Simpan Pukal</button>
             </div>
           </div>
         </div>, document.body

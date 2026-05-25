@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
 
 export default function RekodCuti() {
   const [mounted, setMounted] = useState(false);
@@ -26,17 +27,6 @@ export default function RekodCuti() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
 
-  const [isGantianModalOpen, setIsGantianModalOpen] = useState(false);
-  const [isSubmittingGantian, setIsSubmittingGantian] = useState(false);
-  const [bilanganGantianEntry, setBilanganGantianEntry] = useState(1);
-  const [gantianBulanTahun, setGantianBulanTahun] = useState({
-    tahun: new Date().getFullYear().toString(),
-    bulan: String(new Date().getMonth() + 1).padStart(2, '0'),
-  });
-
-  const janaBarisGantianKosong = () => ({ ic_pegawai: "", jumlah_jam: "" });
-  const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
-
   const [bilanganEntry, setBilanganEntry] = useState(1);
   const janaBarisKosong = () => ({
     ic_pegawai: "", kategori_pegawai: "", jenis_cuti: "", klinik: "",
@@ -44,7 +34,6 @@ export default function RekodCuti() {
   });
   const [entries, setEntries] = useState<any[]>(() => [janaBarisKosong()]);
 
-  // Fungsi utiliti format tarikh
   const formatTarikhMY = (tarikhDB: string) => {
     if (!tarikhDB) return "-";
     const parts = tarikhDB.split("-");
@@ -78,7 +67,7 @@ export default function RekodCuti() {
   };
 
   useEffect(() => { 
-    setMounted(true); // Persediaan Portal
+    setMounted(true); 
     dapatkanDataCuti(); dapatkanPilihanPegawai(); dapatkanCutiUmum(); 
   }, [dapatkanDataCuti]);
   
@@ -98,44 +87,6 @@ export default function RekodCuti() {
     if (jenisCuti === "Cuti Kelompok") return totalCalendarDays; 
     else if (kategori === "Sif") return Math.max(0, totalCalendarDays - (hariOff || 0)); 
     else return workingDays; 
-  };
-
-  useEffect(() => {
-    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
-    setGantianEntries((prev) => {
-      const salinan = [...prev];
-      if (jumlahBaru > salinan.length) { for (let i = salinan.length; i < jumlahBaru; i++) { salinan.push(janaBarisGantianKosong()); } } else { salinan.length = jumlahBaru; }
-      return salinan;
-    });
-  }, [bilanganGantianEntry]);
-
-  const updateGantianEntry = (index: number, field: string, value: any) => {
-    const salinan = [...gantianEntries]; salinan[index] = { ...salinan[index], [field]: value }; setGantianEntries(salinan);
-  };
-
-  const resetBorangGantian = () => { setBilanganGantianEntry(1); setGantianEntries([janaBarisGantianKosong()]); };
-
-  const handleGantianSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSubmittingGantian(true);
-    try {
-      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
-      if (validEntries.length === 0) { alert("Sila isi lengkap."); setIsSubmittingGantian(false); return; }
-      const icSet = new Set();
-      for (const item of validEntries) {
-         if (icSet.has(item.ic_pegawai)) { alert("Pegawai berulang dalam borang."); setIsSubmittingGantian(false); return; }
-         icSet.add(item.ic_pegawai);
-      }
-      const { data: existingBaki, error: errFetch } = await supabase.from("cuti_baki").select("id, ic_pegawai, baki_gantian_jam").eq("tahun", gantianBulanTahun.tahun).in("ic_pegawai", Array.from(icSet));
-      if (errFetch) throw errFetch;
-      const existingMap = new Map(); existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
-      for (const item of validEntries) {
-         const jamTambah = parseFloat(item.jumlah_jam); if (isNaN(jamTambah) || jamTambah <= 0) continue;
-         const rekodLama = existingMap.get(item.ic_pegawai); let bakiTerkini = jamTambah;
-         if (rekodLama) { bakiTerkini += (rekodLama.baki_gantian_jam || 0); await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id); } 
-         else { await supabase.from("cuti_baki").insert({ ic_pegawai: item.ic_pegawai, tahun: gantianBulanTahun.tahun, baki_bawa_hadapan: 0, baki_gantian_jam: jamTambah }); }
-      }
-      alert(`Berjaya!`); setIsGantianModalOpen(false); resetBorangGantian(); dapatkanDataCuti();
-    } catch (err: any) { alert("Gagal merekod: " + err.message); } finally { setIsSubmittingGantian(false); }
   };
 
   const bukaModalEdit = (cuti: any) => {
@@ -278,31 +229,18 @@ export default function RekodCuti() {
 
   return (
     <div className="min-h-screen bg-transparent p-4 sm:p-8 relative print:p-0">
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          @page { margin: 0.5cm; }
-          body, html { background-color: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; height: auto !important; }
-          .h-screen, .min-h-screen, .max-h-screen, .h-full { height: auto !important; min-height: 0 !important; max-height: none !important; }
-          .overflow-y-auto, .overflow-hidden { overflow: visible !important; }
-          aside, nav, .print-hide { display: none !important; }
-          main { flex: none !important; width: 100% !important; overflow: visible !important; margin: 0 !important; padding: 0 !important; }
-          table { border-collapse: collapse !important; width: 100% !important; position: relative; z-index: 10; }
-          th, td { padding: 12px !important; }
-        }
-      `}} />
-
       <div className="max-w-7xl mx-auto print-hide">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 space-y-4 md:space-y-0">
           <div>
             <h1 className="text-3xl font-bold text-emerald-900">Senarai Rekod Cuti</h1>
             <p className="text-emerald-700 text-sm mt-1 font-medium">Sistem Pengurusan & Pengiraan Cuti Berjadual</p>
           </div>
-          <div className="flex space-x-3">
-            <button onClick={() => setIsGantianModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
-              <span className="mr-2">⏱️</span> Tambah Jam Gantian (Batch)
-            </button>
-            <button onClick={() => { resetBorang(); setIsModalOpen(true); }} className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
-              <span className="mr-2">+</span> Permohonan Cuti (Batch)
+          <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
+            <Link href="/admin/cuti/gantian" className="bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-300 px-4 py-2.5 rounded-lg shadow-sm transition flex items-center font-bold text-sm tracking-wide">
+              <span className="mr-2">📋</span> Rekod Cuti Gantian
+            </Link>
+            <button onClick={() => { resetBorang(); setIsModalOpen(true); }} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg shadow-md transition flex items-center font-bold text-sm tracking-wide">
+              <span className="mr-2">+</span> Permohonan Cuti
             </button>
           </div>
         </div>
@@ -358,7 +296,6 @@ export default function RekodCuti() {
                         <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-xs font-bold ${cuti.kategori_pegawai === 'Sif' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'}`}>{cuti.kategori_pegawai || 'Pejabat'}</span></td>
                         <td className="p-4"><span className="font-semibold text-emerald-900">{cuti.jenis_cuti}</span>{cuti.klinik && <span className="ml-2 text-xs bg-emerald-50 border border-emerald-100 px-2 rounded text-emerald-700">{cuti.klinik}</span>}</td>
                         <td className="p-4 text-emerald-800 font-medium">
-                            {/* DITUKAR KEPADA 'hingga' */}
                             {cuti.tarikh_mula === cuti.tarikh_tamat ? formatTarikhMY(cuti.tarikh_mula) : `${formatTarikhMY(cuti.tarikh_mula)} hingga ${formatTarikhMY(cuti.tarikh_tamat)}`}
                         </td>
                         <td className="p-4 text-center text-emerald-700 font-semibold">{cuti.hari_off || '0'}</td>
@@ -388,59 +325,6 @@ export default function RekodCuti() {
           )}
         </div>
       </div>
-
-      {/* POPUP MODAL PUKAL GANTIAN (PORTAL) */}
-      {isGantianModalOpen && mounted && createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[100] transition-opacity print-hide">
-          <div className="bg-white shadow-2xl w-full w-[95%] max-w-5xl h-[90vh] flex flex-col rounded-2xl border border-orange-200 overflow-hidden transform scale-100 transition-transform">
-            <div className="p-6 bg-orange-600 flex justify-between items-center text-white shadow-sm">
-              <div>
-                <h2 className="text-2xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian</h2>
-                <p className="text-xs text-orange-200 mt-1">Sistem akan menambah jam gantian ke dalam baki sedia ada</p>
-              </div>
-              <button onClick={() => setIsGantianModalOpen(false)} className="font-bold text-3xl hover:text-orange-200 transition outline-none">&times;</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 bg-orange-50/30">
-              <form id="bulkGantianForm" onSubmit={handleGantianSubmit} className="space-y-6">
-                <div className="flex justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-sm border border-orange-100">
-                    <div className="flex space-x-4">
-                      <div>
-                        <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Bulan</label>
-                        <select className="border border-orange-200 p-2.5 rounded-lg font-bold text-orange-900 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50" value={gantianBulanTahun.bulan} onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, bulan: e.target.value})}><option value="01">Jan</option><option value="02">Feb</option><option value="03">Mac</option><option value="04">Apr</option><option value="05">Mei</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ogo</option><option value="09">Sep</option><option value="10">Okt</option><option value="11">Nov</option><option value="12">Dis</option></select>
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Tahun</label>
-                        <select className="border border-orange-200 p-2.5 rounded-lg font-bold text-orange-900 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50" value={gantianBulanTahun.tahun} onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, tahun: e.target.value})}><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Bil. Baris</label>
-                      <select className="border border-orange-200 p-2.5 rounded-lg text-orange-700 bg-white font-bold outline-none focus:ring-2 focus:ring-orange-500" value={bilanganGantianEntry} onChange={(e) => setBilanganGantianEntry(parseInt(e.target.value))}>{[...Array(20)].map((_, i) => (<option key={i+1} value={i+1}>{i+1} Baris Entry</option>))}</select>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-orange-100/50 border-b border-orange-200"><tr className="text-orange-900"><th className="p-4 w-16 text-center font-bold">#</th><th className="p-4 font-bold">Nama Pegawai & Bahagian</th><th className="p-4 w-48 text-center font-bold">Jam Diperoleh</th></tr></thead>
-                    <tbody className="divide-y divide-orange-50">
-                      {gantianEntries.map((item, index) => (
-                         <tr key={index} className="hover:bg-orange-50/50 transition">
-                            <td className="p-4 text-center font-bold text-orange-500">{index + 1}</td>
-                            <td className="p-4"><select className="w-full border border-orange-200 p-3 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-medium text-orange-900 bg-white" value={item.ic_pegawai} onChange={(e) => updateGantianEntry(index, 'ic_pegawai', e.target.value)}><option value="">Pilih Pegawai...</option>{pilihanPegawai.map(p => (<option key={p.ic} value={p.ic}>{p.nama} ({p.jabatan_bahagian})</option>))}</select></td>
-                            <td className="p-4"><input type="number" step="0.5" className="w-full border border-orange-200 p-3 rounded-lg font-black text-center text-orange-700 bg-orange-50 outline-none focus:ring-2 focus:ring-orange-500" value={item.jumlah_jam} onChange={(e) => updateGantianEntry(index, 'jumlah_jam', e.target.value)} /></td>
-                         </tr>
-                      ))}
-                    </tbody>
-                </table>
-                </div>
-              </form>
-            </div>
-            <div className="p-5 border-t border-orange-100 bg-white flex justify-end space-x-3 shadow-md">
-              <button type="button" onClick={() => setIsGantianModalOpen(false)} className="px-6 py-2.5 border border-orange-200 rounded-lg text-orange-800 font-bold hover:bg-orange-50 transition">Batal</button>
-              <button type="submit" form="bulkGantianForm" disabled={isSubmittingGantian} className="px-8 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold shadow-md transition disabled:bg-orange-400">Simpan Pukal</button>
-            </div>
-          </div>
-        </div>, document.body
-      )}
 
       {/* POPUP MODAL PUKAL CUTI (PORTAL) */}
       {isModalOpen && mounted && createPortal(
