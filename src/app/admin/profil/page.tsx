@@ -132,7 +132,10 @@ export default function ProfilAdmin() {
             <div>
               <label className="block text-xs font-bold text-emerald-800 uppercase tracking-wide mb-1.5">Emel Log Masuk (Autentikasi)</label>
               <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-100 font-mono text-emerald-900 text-sm shadow-sm">
-                {profil?.username?.toLowerCase().replace(/[^a-z0-9]/g, '')}@sistem.local
+                {/* KOD BARU: Paparkan emel sebenar jika wujud, jika tidak papar dummy */}
+                {profil?.role === 'ADMIN' && profil?.email 
+                  ? profil.email 
+                  : `${profil?.username?.toLowerCase().replace(/[^a-z0-9]/g, '')}@sistem.local`}
               </div>
             </div>
           </div>
