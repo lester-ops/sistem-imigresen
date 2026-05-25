@@ -187,7 +187,7 @@ export default function ProfilAdmin() {
               disabled={isSubmitting}
               className="px-8 py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-md transition disabled:bg-teal-400 disabled:cursor-not-allowed w-full md:w-auto"
             >
-              {isSubmitting ? "Menyimpan..." : "Kemas Kini Kata Laluan"}
+              {isSubmitting ? "Menyimpan...." : "Kemas Kini Kata Laluan"}
             </button>
           </div>
         </form>
