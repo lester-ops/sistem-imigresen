@@ -27,6 +27,17 @@ export default function RekodCutiBahagian() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
 
+  const [isGantianModalOpen, setIsGantianModalOpen] = useState(false);
+  const [isSubmittingGantian, setIsSubmittingGantian] = useState(false);
+  const [bilanganGantianEntry, setBilanganGantianEntry] = useState(1);
+  const [gantianBulanTahun, setGantianBulanTahun] = useState({
+    tahun: new Date().getFullYear().toString(),
+    bulan: String(new Date().getMonth() + 1).padStart(2, '0'),
+  });
+
+  const janaBarisGantianKosong = () => ({ ic_pegawai: "", jumlah_jam: "" });
+  const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
+
   const [bilanganEntry, setBilanganEntry] = useState(1);
   const janaBarisKosong = () => ({
     ic_pegawai: "", kategori_pegawai: "", jenis_cuti: "", klinik: "",
@@ -80,6 +91,7 @@ export default function RekodCutiBahagian() {
   
   useEffect(() => { setCurrentPage(1); }, [carian, filterTahun]);
 
+  // LOGIK BARU YANG TELAH DIPERBETULKAN (BEBAS MASALAH TIMEZONE UTC)
   const kiraBilanganHari = (mula: string, tamat: string, kategori: string, jenisCuti: string, hariOff: number) => {
     if (!mula || !tamat) return 0;
     const dMula = new Date(mula); const dTamat = new Date(tamat);
@@ -87,13 +99,84 @@ export default function RekodCutiBahagian() {
     if (dMula > dTamat) return -1;
     let totalCalendarDays = 0, workingDays = 0, current = new Date(dMula);
     while (current <= dTamat) {
-      totalCalendarDays++; const dayOfWeek = current.getDay(); const dateStr = current.toISOString().split('T')[0];
+      totalCalendarDays++; 
+      const dayOfWeek = current.getDay(); 
+      
+      // Menggunakan format String Manual (Tempatan Malaysia) bukannya .toISOString()
+      const y = current.getFullYear();
+      const m = String(current.getMonth() + 1).padStart(2, '0');
+      const d = String(current.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !tarikhCutiUmum.includes(dateStr)) workingDays++;
       current.setDate(current.getDate() + 1);
     }
     if (jenisCuti === "Cuti Kelompok") return totalCalendarDays; 
     else if (kategori === "Sif") return Math.max(0, totalCalendarDays - (hariOff || 0)); 
     else return workingDays; 
+  };
+
+  useEffect(() => {
+    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
+    setGantianEntries((prev) => {
+      const salinan = [...prev];
+      if (jumlahBaru > salinan.length) { for (let i = salinan.length; i < jumlahBaru; i++) { salinan.push(janaBarisGantianKosong()); } } else { salinan.length = jumlahBaru; }
+      return salinan;
+    });
+  }, [bilanganGantianEntry]);
+
+  const updateGantianEntry = (index: number, field: string, value: any) => {
+    const salinan = [...gantianEntries]; salinan[index] = { ...salinan[index], [field]: value }; setGantianEntries(salinan);
+  };
+
+  const resetBorangGantian = () => { setBilanganGantianEntry(1); setGantianEntries([janaBarisGantianKosong()]); };
+
+  const handleGantianSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsSubmittingGantian(true);
+    try {
+      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
+      if (validEntries.length === 0) { alert("Sila isi lengkap."); setIsSubmittingGantian(false); return; }
+      
+      const icSet = new Set();
+      for (const item of validEntries) {
+         if (icSet.has(item.ic_pegawai)) { alert("Pegawai berulang dalam borang."); setIsSubmittingGantian(false); return; }
+         icSet.add(item.ic_pegawai);
+      }
+      
+      const { data: existingBaki, error: errFetch } = await supabase.from("cuti_baki").select("id, ic_pegawai, baki_gantian_jam").eq("tahun", gantianBulanTahun.tahun).in("ic_pegawai", Array.from(icSet));
+      if (errFetch) throw errFetch;
+      
+      const existingMap = new Map(); existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
+      
+      const rekodSejarah = [];
+
+      for (const item of validEntries) {
+         const jamTambah = parseFloat(item.jumlah_jam); if (isNaN(jamTambah) || jamTambah <= 0) continue;
+         
+         const rekodLama = existingMap.get(item.ic_pegawai); let bakiTerkini = jamTambah;
+         
+         if (rekodLama) { 
+           bakiTerkini += (rekodLama.baki_gantian_jam || 0); 
+           await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id); 
+         } else { 
+           await supabase.from("cuti_baki").insert({ ic_pegawai: item.ic_pegawai, tahun: gantianBulanTahun.tahun, baki_bawa_hadapan: 0, baki_gantian_jam: jamTambah }); 
+         }
+
+         rekodSejarah.push({
+           ic_pegawai: item.ic_pegawai,
+           bulan: gantianBulanTahun.bulan,
+           tahun: gantianBulanTahun.tahun,
+           jumlah_jam: jamTambah
+         });
+      }
+
+      if(rekodSejarah.length > 0) {
+        const { error: errSejarah } = await supabase.from("cuti_gantian_tambah").insert(rekodSejarah);
+        if (errSejarah) throw errSejarah;
+      }
+
+      alert(`Berjaya! Rekod penambahan jam telah disimpan.`); setIsGantianModalOpen(false); resetBorangGantian(); dapatkanDataCuti(bahagianAkses);
+    } catch (err: any) { alert("Gagal merekod: " + err.message); } finally { setIsSubmittingGantian(false); }
   };
 
   const bukaModalEdit = (cuti: any) => {
@@ -292,7 +375,7 @@ export default function RekodCutiBahagian() {
                         <td className="p-4 text-teal-600 text-center font-medium">{indexOfFirstItem + index + 1}</td>
                         <td className="p-4"><div className="font-bold text-teal-900">{cuti.pegawai?.nama || 'Tiada Rekod'}</div><div className="text-xs text-teal-600 mt-0.5">{cuti.pegawai?.jabatan_bahagian || '-'}</div></td>
                         <td className="p-4 text-center"><span className={`px-2 py-0.5 rounded text-xs font-bold ${cuti.kategori_pegawai === 'Sif' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'}`}>{cuti.kategori_pegawai || 'Pejabat'}</span></td>
-                        <td className="p-4"><span className="font-semibold text-teal-900">{cuti.jenis_cuti}</span>{cuti.klinik && <span className="ml-2 text-xs bg-teal-50 border border-teal-100 px-2 rounded text-teal-700">{cuti.klinik}</span>}</td>
+                        <td className="p-4"><span className="font-semibold text-teal-900">{cuti.jenis_cuti}</span>{cuti.klinik && <span className="ml-2 text-xs bg-teal-50 border border-emerald-100 px-2 rounded text-teal-700">{cuti.klinik}</span>}</td>
                         <td className="p-4 text-teal-800 font-medium">
                             {cuti.tarikh_mula === cuti.tarikh_tamat ? formatTarikhMY(cuti.tarikh_mula) : `${formatTarikhMY(cuti.tarikh_mula)} hingga ${formatTarikhMY(cuti.tarikh_tamat)}`}
                         </td>
@@ -323,6 +406,59 @@ export default function RekodCutiBahagian() {
           )}
         </div>
       </div>
+
+      {/* POPUP MODAL PUKAL GANTIAN (PORTAL) */}
+      {isGantianModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 z-[100] transition-opacity print-hide">
+          <div className="bg-white shadow-2xl w-full w-[95%] max-w-5xl h-[90vh] flex flex-col rounded-2xl border border-orange-200 overflow-hidden transform scale-100 transition-transform">
+            <div className="p-6 bg-orange-500 flex justify-between items-center text-white shadow-sm">
+              <div>
+                <h2 className="text-2xl font-bold tracking-wide">Data Entry Pukal: Cuti Gantian</h2>
+                <p className="text-xs text-orange-100 mt-1">Sistem akan merekod sejarah jam gantian ke dalam pangkalan data</p>
+              </div>
+              <button onClick={() => setIsGantianModalOpen(false)} className="font-bold text-3xl hover:text-orange-200 transition outline-none">&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-orange-50/30">
+              <form id="bulkGantianForm" onSubmit={handleGantianSubmit} className="space-y-6">
+                <div className="flex justify-between items-center mb-6 bg-white p-5 rounded-xl shadow-sm border border-orange-100">
+                    <div className="flex space-x-4">
+                      <div>
+                        <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Bulan</label>
+                        <select className="border border-orange-200 p-2.5 rounded-lg font-bold text-orange-900 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50" value={gantianBulanTahun.bulan} onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, bulan: e.target.value})}><option value="01">Jan</option><option value="02">Feb</option><option value="03">Mac</option><option value="04">Apr</option><option value="05">Mei</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ogo</option><option value="09">Sep</option><option value="10">Okt</option><option value="11">Nov</option><option value="12">Dis</option></select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Tahun</label>
+                        <select className="border border-orange-200 p-2.5 rounded-lg font-bold text-orange-900 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50" value={gantianBulanTahun.tahun} onChange={(e) => setGantianBulanTahun({...gantianBulanTahun, tahun: e.target.value})}><option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option></select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-orange-800 uppercase block mb-1">Bil. Baris</label>
+                      <select className="border border-orange-200 p-2.5 rounded-lg text-orange-700 bg-white font-bold outline-none focus:ring-2 focus:ring-orange-500" value={bilanganGantianEntry} onChange={(e) => setBilanganGantianEntry(parseInt(e.target.value))}>{[...Array(20)].map((_, i) => (<option key={i+1} value={i+1}>{i+1} Baris Entry</option>))}</select>
+                    </div>
+                </div>
+                <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-orange-100/50 border-b border-orange-200"><tr className="text-orange-900"><th className="p-4 w-16 text-center font-bold">#</th><th className="p-4 font-bold">Nama Pegawai ({bahagianAkses})</th><th className="p-4 w-48 text-center font-bold">Jam Diperoleh</th></tr></thead>
+                    <tbody className="divide-y divide-orange-50">
+                      {gantianEntries.map((item, index) => (
+                         <tr key={index} className="hover:bg-orange-50/50 transition">
+                            <td className="p-4 text-center font-bold text-orange-500">{index + 1}</td>
+                            <td className="p-4"><select className="w-full border border-orange-200 p-3 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-medium text-orange-900 bg-white" value={item.ic_pegawai} onChange={(e) => updateGantianEntry(index, 'ic_pegawai', e.target.value)}><option value="">Pilih Pegawai...</option>{pilihanPegawai.map(p => (<option key={p.ic} value={p.ic}>{p.nama}</option>))}</select></td>
+                            <td className="p-4"><input type="number" step="0.5" className="w-full border border-orange-200 p-3 rounded-lg font-black text-center text-orange-700 bg-orange-50 outline-none focus:ring-2 focus:ring-orange-500" value={item.jumlah_jam} onChange={(e) => updateGantianEntry(index, 'jumlah_jam', e.target.value)} /></td>
+                         </tr>
+                      ))}
+                    </tbody>
+                </table>
+                </div>
+              </form>
+            </div>
+            <div className="p-5 border-t border-orange-100 bg-white flex justify-end space-x-3 shadow-md">
+              <button type="button" onClick={() => setIsGantianModalOpen(false)} className="px-6 py-2.5 border border-orange-200 rounded-lg text-orange-800 font-bold hover:bg-orange-50 transition">Batal</button>
+              <button type="submit" form="bulkGantianForm" disabled={isSubmittingGantian} className="px-8 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold shadow-md transition disabled:bg-orange-400">Simpan Pukal</button>
+            </div>
+          </div>
+        </div>, document.body
+      )}
 
       {/* POPUP MODAL PUKAL CUTI (PORTAL) */}
       {isModalOpen && mounted && createPortal(
@@ -400,7 +536,6 @@ export default function RekodCutiBahagian() {
           </div>
         </div>, document.body
       )}
-
     </div>
   );
 }

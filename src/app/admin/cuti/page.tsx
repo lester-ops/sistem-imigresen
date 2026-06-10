@@ -27,6 +27,17 @@ export default function RekodCuti() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
 
+  const [isGantianModalOpen, setIsGantianModalOpen] = useState(false);
+  const [isSubmittingGantian, setIsSubmittingGantian] = useState(false);
+  const [bilanganGantianEntry, setBilanganGantianEntry] = useState(1);
+  const [gantianBulanTahun, setGantianBulanTahun] = useState({
+    tahun: new Date().getFullYear().toString(),
+    bulan: String(new Date().getMonth() + 1).padStart(2, '0'),
+  });
+
+  const janaBarisGantianKosong = () => ({ ic_pegawai: "", jumlah_jam: "" });
+  const [gantianEntries, setGantianEntries] = useState<any[]>(() => [janaBarisGantianKosong()]);
+
   const [bilanganEntry, setBilanganEntry] = useState(1);
   const janaBarisKosong = () => ({
     ic_pegawai: "", kategori_pegawai: "", jenis_cuti: "", klinik: "",
@@ -73,6 +84,7 @@ export default function RekodCuti() {
   
   useEffect(() => { setCurrentPage(1); }, [carian, filterBahagian, filterTahun]);
 
+  // LOGIK BARU YANG TELAH DIPERBETULKAN (BEBAS MASALAH TIMEZONE UTC)
   const kiraBilanganHari = (mula: string, tamat: string, kategori: string, jenisCuti: string, hariOff: number) => {
     if (!mula || !tamat) return 0;
     const dMula = new Date(mula); const dTamat = new Date(tamat);
@@ -80,13 +92,84 @@ export default function RekodCuti() {
     if (dMula > dTamat) return -1;
     let totalCalendarDays = 0, workingDays = 0, current = new Date(dMula);
     while (current <= dTamat) {
-      totalCalendarDays++; const dayOfWeek = current.getDay(); const dateStr = current.toISOString().split('T')[0];
+      totalCalendarDays++; 
+      const dayOfWeek = current.getDay(); 
+      
+      // Menggunakan format String Manual (Tempatan Malaysia) bukannya .toISOString()
+      const y = current.getFullYear();
+      const m = String(current.getMonth() + 1).padStart(2, '0');
+      const d = String(current.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !tarikhCutiUmum.includes(dateStr)) workingDays++;
       current.setDate(current.getDate() + 1);
     }
     if (jenisCuti === "Cuti Kelompok") return totalCalendarDays; 
     else if (kategori === "Sif") return Math.max(0, totalCalendarDays - (hariOff || 0)); 
     else return workingDays; 
+  };
+
+  useEffect(() => {
+    const jumlahBaru = parseInt(bilanganGantianEntry.toString()) || 1;
+    setGantianEntries((prev) => {
+      const salinan = [...prev];
+      if (jumlahBaru > salinan.length) { for (let i = salinan.length; i < jumlahBaru; i++) { salinan.push(janaBarisGantianKosong()); } } else { salinan.length = jumlahBaru; }
+      return salinan;
+    });
+  }, [bilanganGantianEntry]);
+
+  const updateGantianEntry = (index: number, field: string, value: any) => {
+    const salinan = [...gantianEntries]; salinan[index] = { ...salinan[index], [field]: value }; setGantianEntries(salinan);
+  };
+
+  const resetBorangGantian = () => { setBilanganGantianEntry(1); setGantianEntries([janaBarisGantianKosong()]); };
+
+  const handleGantianSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setIsSubmittingGantian(true);
+    try {
+      const validEntries = gantianEntries.filter(e => e.ic_pegawai !== "" && e.jumlah_jam !== "");
+      if (validEntries.length === 0) { alert("Sila isi lengkap."); setIsSubmittingGantian(false); return; }
+      
+      const icSet = new Set();
+      for (const item of validEntries) {
+         if (icSet.has(item.ic_pegawai)) { alert("Pegawai berulang dalam borang."); setIsSubmittingGantian(false); return; }
+         icSet.add(item.ic_pegawai);
+      }
+      
+      const { data: existingBaki, error: errFetch } = await supabase.from("cuti_baki").select("id, ic_pegawai, baki_gantian_jam").eq("tahun", gantianBulanTahun.tahun).in("ic_pegawai", Array.from(icSet));
+      if (errFetch) throw errFetch;
+      
+      const existingMap = new Map(); existingBaki?.forEach(b => existingMap.set(b.ic_pegawai, b));
+      
+      const rekodSejarah = [];
+
+      for (const item of validEntries) {
+         const jamTambah = parseFloat(item.jumlah_jam); if (isNaN(jamTambah) || jamTambah <= 0) continue;
+         
+         const rekodLama = existingMap.get(item.ic_pegawai); let bakiTerkini = jamTambah;
+         
+         if (rekodLama) { 
+           bakiTerkini += (rekodLama.baki_gantian_jam || 0); 
+           await supabase.from("cuti_baki").update({ baki_gantian_jam: bakiTerkini }).eq("id", rekodLama.id); 
+         } else { 
+           await supabase.from("cuti_baki").insert({ ic_pegawai: item.ic_pegawai, tahun: gantianBulanTahun.tahun, baki_bawa_hadapan: 0, baki_gantian_jam: jamTambah }); 
+         }
+
+         rekodSejarah.push({
+           ic_pegawai: item.ic_pegawai,
+           bulan: gantianBulanTahun.bulan,
+           tahun: gantianBulanTahun.tahun,
+           jumlah_jam: jamTambah
+         });
+      }
+
+      if(rekodSejarah.length > 0) {
+        const { error: errSejarah } = await supabase.from("cuti_gantian_tambah").insert(rekodSejarah);
+        if (errSejarah) throw errSejarah;
+      }
+
+      alert(`Berjaya! Rekod penambahan jam telah disimpan.`); setIsGantianModalOpen(false); resetBorangGantian(); dapatkanDataCuti();
+    } catch (err: any) { alert("Gagal merekod: " + err.message); } finally { setIsSubmittingGantian(false); }
   };
 
   const bukaModalEdit = (cuti: any) => {
@@ -402,7 +485,6 @@ export default function RekodCuti() {
           </div>
         </div>, document.body
       )}
-
     </div>
   );
 }
